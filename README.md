@@ -1,6 +1,6 @@
 # Ten Ten Blackjack
 
-A retro pixel blackjack trainer for iPhone that lets you play the whole game. Every decision is checked against the book (basic strategy); get one wrong and it tells you the right play and why.
+A retro pixel blackjack trainer for iPhone that lets you play the whole game. Every decision is checked against the book (basic strategy); get one wrong and it tells you the right play and why, then your move stands.
 
 **Play chips only.** There is no real money anywhere: nothing to buy, nothing to win, nothing to cash out.
 

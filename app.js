@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.2.0';
+const VERSION = '1.3.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -452,9 +452,9 @@ async function correct(info, bookId, yourId) {
     '<p class="you">YOU CHOSE: ' + esc(info.you) + '<br>' + esc(info.hand.toUpperCase()) + '</p>' +
     '<div class="why">' + esc(info.why) + '</div>' +
     '<p class="fine" style="margin-top:10px">Book streak reset to 0.</p>',
-    [{ id: 'book', label: 'PLAY THE BOOK MOVE: ' + info.book, cls: 'dbl' }, { id: 'keep', label: 'KEEP MY MOVE: ' + info.you, cls: 'dark' }]
+    [{ id: 'keep', label: 'CONTINUE: ' + info.you, cls: 'stand' }]
   );
-  return choice === 'book' ? bookId : yourId;
+  return yourId; // your move stands: no take-backs
 }
 
 function settleAll() {
@@ -723,7 +723,7 @@ async function showHow() {
   closeMenu();
   await modal('<h2>HOW IT WORKS</h2>' +
     '<p>Every session is 25 hands from one shuffled shoe. The shoe comes from the session\'s seed, so anyone who plays the same seed gets the same cards in the same order. Share yours from the results screen.</p>' +
-    '<p>Each time you act, your play is checked against the book (basic strategy). Get it right and your BOOK STREAK grows. Get it wrong and you\'ll see what the book says and why, then choose to play the book move or keep yours.</p>' +
+    '<p>Each time you act, your play is checked against the book (basic strategy). Get it right and your BOOK STREAK grows. Get it wrong and you\'ll see what the book says and why, then your move is played: no take-backs.</p>' +
     '<p>Win a hand and your WIN STREAK grows. A push keeps it going; a loss resets it.</p>' +
     '<h3>TEN TEN BUST</h3><p>If the dealer busts and the last two cards they drew are both tens or picture cards, it\'s a TEN TEN BUST.</p>' +
     '<h3>DAILY</h3><p>One shared shoe for everyone each day (by UTC date), with £500 in play chips and a £250 table maximum (£10 minimum). Share your chip total at the end. Your first finish of the day is your score.</p>' +
