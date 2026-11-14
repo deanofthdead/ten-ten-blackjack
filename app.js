@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.5.0';
+const VERSION = '2.6.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -264,7 +264,7 @@ function modal(html, buttons) {
 // ---------- Session state ----------
 let S = null;   // the session
 let R = null;   // the current round
-function newStats() { return { won: 0, lost: 0, push: 0, bj: 0, dec: 0, ok: 0, winStreak: 0, bestWin: 0, bookStreak: 0, bestBook: 0, tenten: 0, mistakes: [] }; }
+function newStats() { return { won: 0, lost: 0, push: 0, bj: 0, dec: 0, ok: 0, winStreak: 0, bestWin: 0, bookStreak: 0, bestBook: 0, tenten: 0, eggs: 0, mistakes: [] }; }
 function isDaily() { return S && S.mode === 'daily'; }
 function money(n) { return '£' + (Math.round(n * 100) / 100).toLocaleString('en-GB'); }
 function dailyLabel(key) { const d = new Date(key + 'T12:00:00Z'); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase(); }
@@ -523,7 +523,7 @@ function settleAll() {
   S.lastLost = units < 0;
   // Results stay as the stamps on the hand boxes; the felt banner only carries the hype lines.
   banner.release(TEN_ASK); // the result is in
-  if (units > 0) { sfx.win(); if (R.offBook) banner.show('EGG', { replace: true, hold: 1400 }); } // off book but won anyway
+  if (units > 0) { sfx.win(); if (R.offBook) { st.eggs = (st.eggs || 0) + 1; P.life.eggs = (P.life.eggs || 0) + 1; save(); banner.show('EGG', { replace: true, hold: 1400 }); } } // off book but won anyway
   else if (units < 0) {
     sfx.lose();
     banner.show("DON'T WORRY,", { hold: 1000, replace: true });
@@ -842,6 +842,7 @@ async function finishSession() {
     ['SEED', daily ? 'DAILY' : S.seed], ['HANDS', S.handNo], ['WON / LOST / PUSH', st.won + ' / ' + st.lost + ' / ' + st.push],
     ['BLACKJACKS', st.bj], ['BOOK PLAYS', st.ok + '/' + st.dec + ' (' + pct(st.ok, st.dec) + ')'],
     ['BEST WIN STREAK', st.bestWin], ['BEST BOOK STREAK', st.bestBook], ['TEN TEN BUSTS', st.tenten],
+    ['EGGS (OFF BOOK, STILL WON)', st.eggs || 0],
   ].map(([a, b]) => '<div class="stat">' + a + ' <b>' + esc(b) + '</b></div>').join('');
   if (st.mistakes.length) html += '<h3>PLAYS TO REVISE</h3><p class="fine">' + st.mistakes.slice(0, 12).map(esc).join('<br>') + '</p>';
   if (daily) html += '<p class="fine" style="margin-top:8px">Play chips only. No real money, nothing to cash out.</p>';
@@ -877,7 +878,7 @@ function openMenu(note) {
     '<button class="btn hit" data-a="daily">DAILY · ' + dailyLabel(key) + (dr ? '<small>YOUR SCORE ' + money(dr.chips) + ' · BOOK ' + esc(dr.book) + '</small>' : '<small>£500 PLAY CHIPS · £250 TABLE MAX</small>') + '</button>' +
     '<button class="btn split" data-a="chart">BOOK CHART</button>' +
     '<button class="btn dark" data-a="how">HOW IT WORKS</button></div>' +
-    '<div class="lifetime">BOOK ACCURACY ' + pct(P.life.ok, P.life.dec) + ' · BEST BOOK STREAK ' + P.best.book + '<br>BEST WIN STREAK ' + P.best.win + ' · TEN TEN BUSTS ' + P.life.tenten + '</div>' +
+    '<div class="lifetime">BOOK ACCURACY ' + pct(P.life.ok, P.life.dec) + ' · BEST BOOK STREAK ' + P.best.book + '<br>BEST WIN STREAK ' + P.best.win + ' · TEN TEN BUSTS ' + P.life.tenten + '<br>EGGS ' + (P.life.eggs || 0) + '</div>' +
     '<div class="soundRow"><button class="btn dark" data-a="sound" style="font-size:8px;padding:8px 10px">SOUND ' + (P.sound ? 'ON' : 'OFF') + '</button></div>' +
     '<p class="fine" style="text-align:center;margin:10px 0 0">PLAY CHIPS ONLY. NO REAL MONEY, NO PURCHASES, NOTHING TO WIN OR CASH OUT.<br>v' + VERSION + '</p>';
   mb.innerHTML = h;
