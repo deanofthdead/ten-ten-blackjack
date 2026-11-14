@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -46,49 +46,85 @@ function bits(x, rows, ox, oy, col, rot, W, H) {
     if (rot) x.fillRect(W - 1 - (ox + i), H - 1 - (oy + y), 1, 1); else x.fillRect(ox + i, oy + y, 1, 1);
   } });
 }
+// Cards are drawn at 50x70 art pixels (twice the old resolution) and shown at the same size,
+// so the pixel look stays but ranks get a clear 5x7 font drawn at 2x.
+const CARD_W = 50, CARD_H = 70;
+const BIG = {
+  A: ['.XXX.', 'X...X', 'X...X', 'XXXXX', 'X...X', 'X...X', 'X...X'],
+  2: ['.XXX.', 'X...X', '....X', '...X.', '..X..', '.X...', 'XXXXX'],
+  3: ['XXXX.', '....X', '....X', '.XXX.', '....X', '....X', 'XXXX.'],
+  4: ['...X.', '..XX.', '.X.X.', 'X..X.', 'XXXXX', '...X.', '...X.'],
+  5: ['XXXXX', 'X....', 'XXXX.', '....X', '....X', 'X...X', '.XXX.'],
+  6: ['..XX.', '.X...', 'X....', 'XXXX.', 'X...X', 'X...X', '.XXX.'],
+  7: ['XXXXX', '....X', '...X.', '..X..', '.X...', '.X...', '.X...'],
+  8: ['.XXX.', 'X...X', 'X...X', '.XXX.', 'X...X', 'X...X', '.XXX.'],
+  9: ['.XXX.', 'X...X', 'X...X', '.XXXX', '....X', '...X.', '.XX..'],
+  1: ['..X..', '.XX..', '..X..', '..X..', '..X..', '..X..', '.XXX.'],
+  0: ['.XXX.', 'X...X', 'X..XX', 'X.X.X', 'XX..X', 'X...X', '.XXX.'],
+  J: ['..XXX', '...X.', '...X.', '...X.', '...X.', 'X..X.', '.XX..'],
+  Q: ['.XXX.', 'X...X', 'X...X', 'X...X', 'X.X.X', 'X..X.', '.XX.X'],
+  K: ['X...X', 'X..X.', 'X.X..', 'XX...', 'X.X..', 'X..X.', 'X...X'],
+};
+// Draw a bitmap at integer scale; rot draws it rotated 180° about the card centre.
+function blit(x, rows, ox, oy, col, sc, rot) {
+  sc = sc || 1; x.fillStyle = col;
+  rows.forEach((row, y) => { for (let i = 0; i < row.length; i++) if (row[i] === 'X') {
+    const px = ox + i * sc, py = oy + y * sc;
+    if (rot) x.fillRect(CARD_W - px - sc, CARD_H - py - sc, sc, sc); else x.fillRect(px, py, sc, sc);
+  } });
+}
 function cardShape(x, edge, fill) {
-  x.fillStyle = edge; x.fillRect(1, 0, CW - 2, CH); x.fillRect(0, 1, CW, CH - 2);
-  x.fillStyle = fill; x.fillRect(2, 1, CW - 4, CH - 2); x.fillRect(1, 2, CW - 2, CH - 4);
+  const W = CARD_W, H = CARD_H;
+  x.fillStyle = edge; x.fillRect(2, 0, W - 4, H); x.fillRect(1, 1, W - 2, H - 2); x.fillRect(0, 2, W, H - 4);
+  x.fillStyle = fill; x.fillRect(3, 2, W - 6, H - 4); x.fillRect(2, 3, W - 4, H - 6);
+}
+function rankWidth(glyphs, sc) { return glyphs.reduce((w, g) => w + BIG[g][0].length * sc, 0) + (glyphs.length - 1) * sc; }
+function drawRank(x, glyphs, ox, oy, col, sc, rot) {
+  let gx = ox;
+  for (const g of glyphs) {
+    blit(x, BIG[g], gx, oy, col, sc, rot);
+    if (sc > 1) blit(x, BIG[g], gx + 1, oy, col, sc, rot); // faux bold for the big index
+    gx += BIG[g][0].length * sc + sc;
+  }
 }
 const imgCache = {};
 function cardSrc(card) {
   const k = card.r + card.s;
   if (imgCache[k]) return imgCache[k];
-  const [c, x] = canvas(CW, CH);
+  const [c, x] = canvas(CARD_W, CARD_H);
   const col = (card.s === 'H' || card.s === 'D') ? RED : BLK;
   cardShape(x, BLK, PAPER);
   const glyphs = card.r === '10' ? ['1', '0'] : [card.r];
-  for (const rot of [false, true]) {
-    let gx = 2;
-    for (const g of glyphs) { bits(x, FONT[g], gx, 2, col, rot, CW, CH); gx += 4; }
-    bits(x, PIP5[card.s], 2, 8, col, rot, CW, CH);
-  }
+  // Top-left: big 2x rank and suit, the bit you read when cards overlap.
+  drawRank(x, glyphs, 4, 4, col, 2, false);
+  blit(x, PIP7[card.s], 4, 21, col, 1, false);
+  // Bottom-right: smaller upright index (upright so a 6 never reads as a 9).
+  const sw = rankWidth(glyphs, 1);
+  drawRank(x, glyphs, CARD_W - 4 - sw, CARD_H - 11, col, 1, false);
+  blit(x, PIP7[card.s], CARD_W - 11, CARD_H - 20, col, 1, false);
   if (card.r === 'J' || card.r === 'Q' || card.r === 'K') {
-    x.fillStyle = col; x.fillRect(7, 7, 11, 21); x.fillStyle = '#fff6d2'; x.fillRect(8, 8, 9, 19);
-    bits(x, CROWN, 9, 10, GOLD, false, CW, CH);
-    x.fillStyle = BLK; x.fillRect(10, 11, 1, 1); x.fillRect(14, 11, 1, 1);
-    bits(x, PIP7[card.s], 9, 16, col, false, CW, CH);
-    bits(x, FONT[card.r], 11, 24 - 1, col, false, CW, CH);
+    x.fillStyle = col; x.fillRect(14, 22, 23, 33); x.fillStyle = '#fff6d2'; x.fillRect(15, 23, 21, 31);
+    blit(x, CROWN, 18, 26, GOLD, 2, false);
+    x.fillStyle = BLK; x.fillRect(22, 29, 2, 2); x.fillRect(28, 29, 2, 2);
+    blit(x, PIP7[card.s], 18, 37, col, 2, false);
   } else if (card.r === 'A') {
-    // big ace pip: draw the 7x7 pip doubled-ish (9px) by drawing it at 1px offsets
-    bits(x, PIP7[card.s], 9, 13, col, false, CW, CH);
-    x.fillStyle = GOLD; x.fillRect(12, 11, 1, 1); x.fillRect(12, 21, 1, 1); x.fillRect(7, 16, 1, 1); x.fillRect(17, 16, 1, 1);
+    blit(x, PIP7[card.s], 15, 25, col, 3, false);
   } else {
-    bits(x, PIP7[card.s], 9, 14, col, false, CW, CH);
+    blit(x, PIP7[card.s], 18, 30, col, 2, false);
   }
   return (imgCache[k] = c.toDataURL());
 }
 let BACK_SRC = null;
 function backSrc() {
   if (BACK_SRC) return BACK_SRC;
-  const [c, x] = canvas(CW, CH);
+  const [c, x] = canvas(CARD_W, CARD_H);
   cardShape(x, BLK, '#9c1d2a');
   x.fillStyle = '#c8303f';
-  for (let yy = 3; yy < CH - 3; yy++) for (let xx = 3; xx < CW - 3; xx++) if ((xx + yy) % 4 === 0 || (xx - yy + 400) % 4 === 0) x.fillRect(xx, yy, 1, 1);
-  x.strokeStyle = GOLD; x.lineWidth = 1; x.strokeRect(2.5, 2.5, CW - 5, CH - 5);
-  x.fillStyle = '#9c1d2a'; x.fillRect(6, 13, 13, 9);
-  bits(x, FONT['1'], 6, 15, GOLD); bits(x, FONT['0'], 9, 15, GOLD);
-  bits(x, FONT['1'], 13, 15, GOLD); bits(x, FONT['0'], 16, 15, GOLD);
+  for (let yy = 6; yy < CARD_H - 6; yy++) for (let xx = 6; xx < CARD_W - 6; xx++) if ((xx + yy) % 6 < 2 || (xx - yy + 600) % 6 < 2) x.fillRect(xx, yy, 1, 1);
+  x.fillStyle = GOLD; x.fillRect(4, 4, CARD_W - 8, 2); x.fillRect(4, CARD_H - 6, CARD_W - 8, 2); x.fillRect(4, 4, 2, CARD_H - 8); x.fillRect(CARD_W - 6, 4, 2, CARD_H - 8);
+  const g = ['1', '0', '1', '0'], w = rankWidth(g, 1);
+  x.fillStyle = '#9c1d2a'; x.fillRect((CARD_W - w) / 2 - 3, 27, w + 6, 13);
+  drawRank(x, g, (CARD_W - w) / 2, 30, GOLD, 1, false);
   return (BACK_SRC = c.toDataURL());
 }
 const chipCache = {};
