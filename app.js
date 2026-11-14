@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.1.0';
+const VERSION = '2.2.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -356,7 +356,6 @@ async function playRound() {
     await deal(h.cards); await deal(R.dealer); await deal(h.cards); await deal(R.dealer, true);
   }
   const up = R.dealer[0];
-  if (TT.val(up.r) <= 6) { hype(TEN_ASK); R.tenAsk = true; }
 
   // Insurance / even money: the book always says no.
   if (up.r === 'A') {
@@ -393,8 +392,10 @@ async function playRound() {
   for (let i = 0; i < R.hands.length; i++) { R.active = i; render(); await playHand(i); }
   R.active = -1;
 
-  reveal(); await sleep(500);
   const live = R.hands.some(x => TT.total(x.cards).t <= 21);
+  // Your decisions are done: if the dealer shows a bust card, call for a ten (stays up until the result).
+  if (live && TT.val(R.dealer[0].r) <= 6) { hype(TEN_ASK, false, { sticky: true }); R.tenAsk = true; await sleep(700); }
+  reveal(); await sleep(500);
   if (live) while (TT.dealerShouldHit(R.dealer)) {
     const dt = TT.total(R.dealer).t;
     if (dt >= 12 && dt <= 16) { // dealer on a stiff: a ten busts them
@@ -402,7 +403,7 @@ async function playRound() {
       if (R.tenAsk && !TT.isTen(last)) R.tenLevel = (R.tenLevel || 0) + 1; // we asked for a ten and didn't get one: turn it up
       R.tenAsk = true;
       const lv = R.tenLevel || 0;
-      hype(TEN_ASK, lv > 0, { level: lv, hold: 1600 });
+      hype(TEN_ASK, lv > 0, { level: lv, sticky: true });
       if (lv) [0, 1, 2].forEach(i => tone(520 + 120 * lv + 90 * i, 0.07, 'square', 0.045, i * 0.07));
       await sleep(650);
     }
@@ -508,6 +509,7 @@ function settleAll() {
   render();
   S.lastLost = units < 0;
   // Results stay as the stamps on the hand boxes; the felt banner only carries the hype lines.
+  banner.release(TEN_ASK); // the result is in
   if (units > 0) sfx.win();
   else if (units < 0) {
     sfx.lose();
@@ -571,7 +573,7 @@ const banner = (() => {
   path.setAttribute('d', 'M ' + pts.join(' L '));
   const L = path.getTotalLength(), MID = L / 2, TRAVEL = L / 2 - 24;
   const TITLE = { text: 'TEN TEN BLACKJACK', cls: '', size: 16, hold: 0 };
-  let showing = null, queue = [], running = false, interrupt = false;
+  let showing = null, entering = null, queue = [], running = false, interrupt = false;
   const easeOut = p => 1 - Math.pow(1 - p, 3), easeIn = p => p * p * p;
   function tween(dur, ease, fn) {
     return new Promise(res => {
@@ -609,8 +611,8 @@ const banner = (() => {
       if (queue.length) {
         const it = queue.shift();
         if (showing) await exit();
-        await enter(it);
-        it.until = performance.now() + it.hold;
+        entering = it; await enter(it); entering = null;
+        it.until = it.released ? 0 : performance.now() + it.hold;
         while (performance.now() < it.until && !interrupt) await wait(40);
         interrupt = false;
         continue;
@@ -624,7 +626,7 @@ const banner = (() => {
     // opts: cls (colour), hold (ms on screen), replace (drop anything queued and cut in now)
     show(text, opts) {
       opts = opts || {};
-      const hold = opts.hold || 1300;
+      const hold = opts.sticky ? Infinity : (opts.hold || 1300);
       if (showing && showing.text === text && showing !== TITLE && !queue.length) {
         showing.until = Math.max(showing.until || 0, performance.now() + hold);
         if ((opts.level || 0) !== (showing.level || 0)) { showing.level = opts.level || 0; applyLevel(showing); }
@@ -633,6 +635,11 @@ const banner = (() => {
       if (opts.replace) { queue.length = 0; if (showing && showing !== TITLE) interrupt = true; }
       queue.push({ text, cls: opts.cls || '', hold, level: opts.level || 0 });
       pump();
+    },
+    // Let a sticky message go (e.g. the hand's result is in): it glides off and the title returns.
+    release(text) {
+      for (let i = queue.length - 1; i >= 0; i--) if (queue[i].text === text) queue.splice(i, 1);
+      [showing, entering].forEach(x => { if (x && x.text === text) { x.released = true; x.until = 0; } });
     },
     // Bring the title on afresh (start of a shoe).
     intro() { queue.length = 0; queue.push(TITLE); interrupt = true; pump(); },
