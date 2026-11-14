@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.0.0';
+const VERSION = '2.0.1';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -499,19 +499,13 @@ function settleAll() {
   save();
   render();
   S.lastLost = units < 0;
-  const dealerBust = TT.total(R.dealer).t > 21;
-  if (units > 0) {
-    sfx.win();
-    banner.show(dealerBust ? 'DEALER BUST' : anyBJ && R.hands.length === 1 ? 'BLACKJACK!' : 'WIN', { cls: dealerBust ? 'b-bust' : 'b-win', hold: 1300, replace: true });
-  } else if (units < 0) {
+  // Results stay as the stamps on the hand boxes; the felt banner only carries the hype lines.
+  if (units > 0) sfx.win();
+  else if (units < 0) {
     sfx.lose();
-    banner.show('LOSE', { cls: 'b-lose', hold: 900, replace: true });
-    banner.show("DON'T WORRY,", { hold: 1000 });
+    banner.show("DON'T WORRY,", { hold: 1000, replace: true });
     banner.show("WE'RE BUILDING IT UP", { hold: 1500 });
-  } else {
-    sfx.push();
-    banner.show('PUSH', { cls: 'b-push', hold: 1200, replace: true });
-  }
+  } else sfx.push();
 }
 
 async function tenTenBust() {
