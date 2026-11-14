@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.0.1';
+const VERSION = '2.1.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -356,7 +356,7 @@ async function playRound() {
     await deal(h.cards); await deal(R.dealer); await deal(h.cards); await deal(R.dealer, true);
   }
   const up = R.dealer[0];
-  if (TT.val(up.r) <= 6) hype("LET'S HAVE A TEN!");
+  if (TT.val(up.r) <= 6) { hype(TEN_ASK); R.tenAsk = true; }
 
   // Insurance / even money: the book always says no.
   if (up.r === 'A') {
@@ -397,7 +397,15 @@ async function playRound() {
   const live = R.hands.some(x => TT.total(x.cards).t <= 21);
   if (live) while (TT.dealerShouldHit(R.dealer)) {
     const dt = TT.total(R.dealer).t;
-    if (dt >= 12 && dt <= 16) { hype("LET'S HAVE A TEN!"); await sleep(650); } // dealer on a stiff: a ten busts them
+    if (dt >= 12 && dt <= 16) { // dealer on a stiff: a ten busts them
+      const last = R.dealer[R.dealer.length - 1];
+      if (R.tenAsk && !TT.isTen(last)) R.tenLevel = (R.tenLevel || 0) + 1; // we asked for a ten and didn't get one: turn it up
+      R.tenAsk = true;
+      const lv = R.tenLevel || 0;
+      hype(TEN_ASK, lv > 0, { level: lv, hold: 1600 });
+      if (lv) [0, 1, 2].forEach(i => tone(520 + 120 * lv + 90 * i, 0.07, 'square', 0.045, i * 0.07));
+      await sleep(650);
+    }
     else await sleep(450); // dealer draws at a steadier pace
     await deal(R.dealer);
     await sleep(350);
@@ -576,10 +584,18 @@ const banner = (() => {
   }
   const wait = ms => new Promise(r => setTimeout(r, ms));
   function place(offset, op) { tp.setAttribute('startOffset', offset.toFixed(1)); txt.setAttribute('opacity', op.toFixed(3)); }
+  // level > 0: the text grows and shakes harder each step (stacking "come on, a ten!" effect)
+  function applyLevel(it) {
+    const lv = it.level || 0, base = it.size || Math.min(18, Math.floor(330 / it.text.length));
+    txt.style.fontSize = Math.min(34, base * (1 + 0.22 * lv)).toFixed(1) + 'px';
+    txt.style.setProperty('--amp', (1.2 * lv) + 'px');
+    txt.style.setProperty('--spin', (0.8 * lv) + 'deg');
+    txt.style.animationDuration = Math.max(0.06, 0.16 - 0.025 * lv) + 's';
+    txt.setAttribute('class', 't1' + (it.cls ? ' ' + it.cls : '') + (lv ? ' shake' : ''));
+  }
   async function enter(it) {
     tp.textContent = it.text; svg.setAttribute('aria-label', it.text);
-    txt.setAttribute('class', 't1' + (it.cls ? ' ' + it.cls : ''));
-    txt.style.fontSize = (it.size || Math.min(18, Math.floor(330 / it.text.length))) + 'px';
+    applyLevel(it);
     await tween(it === TITLE ? 750 : 520, easeOut, p => place(MID - TRAVEL * (1 - p), p));
     showing = it;
   }
@@ -609,15 +625,20 @@ const banner = (() => {
     show(text, opts) {
       opts = opts || {};
       const hold = opts.hold || 1300;
-      if (showing && showing.text === text && showing !== TITLE && !queue.length) { showing.until = Math.max(showing.until || 0, performance.now() + hold); return; }
+      if (showing && showing.text === text && showing !== TITLE && !queue.length) {
+        showing.until = Math.max(showing.until || 0, performance.now() + hold);
+        if ((opts.level || 0) !== (showing.level || 0)) { showing.level = opts.level || 0; applyLevel(showing); }
+        return;
+      }
       if (opts.replace) { queue.length = 0; if (showing && showing !== TITLE) interrupt = true; }
-      queue.push({ text, cls: opts.cls || '', hold });
+      queue.push({ text, cls: opts.cls || '', hold, level: opts.level || 0 });
       pump();
     },
     // Bring the title on afresh (start of a shoe).
     intro() { queue.length = 0; queue.push(TITLE); interrupt = true; pump(); },
   };
 })();
+const TEN_ASK = "LET'S HAVE A TEN!";
 function hype(msg, quiet, opts) {
   banner.show(msg, Object.assign({ hold: 1500 }, opts));
   if (!quiet) { tone(784, 0.08, 'square', 0.04); tone(1046, 0.12, 'square', 0.04, 0.08); }

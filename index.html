@@ -61,6 +61,8 @@ img{image-rendering:pixelated;image-rendering:crisp-edges}
 #print{text-align:center;color:var(--yl);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:7px}
 #print svg{display:block;width:min(92vw,420px);height:auto;overflow:visible}
 #print .t1{font-size:16px;fill:var(--yl);letter-spacing:1px;stroke:#0b2a14;stroke-width:3px;paint-order:stroke;stroke-linejoin:round}
+#print .t1.shake{animation:tshake .16s linear infinite;transform-box:fill-box;transform-origin:50% 50%}
+@keyframes tshake{0%{transform:translate(calc(var(--amp) * -1),0) rotate(calc(var(--spin) * -1))}25%{transform:translate(var(--amp),calc(var(--amp) * -.7)) rotate(var(--spin))}50%{transform:translate(calc(var(--amp) * -.6),var(--amp)) rotate(calc(var(--spin) * -.5))}75%{transform:translate(calc(var(--amp) * .8),calc(var(--amp) * .4)) rotate(calc(var(--spin) * .7))}100%{transform:translate(calc(var(--amp) * -1),0) rotate(calc(var(--spin) * -1))}}
 #print .t1.b-win{fill:#5fe06a}#print .t1.b-lose{fill:#ff6a5a}#print .t1.b-push{fill:#ffffff}#print .t1.b-bust{fill:#ff9a3c}
 #print .sub{font-size:7px;line-height:1.6;opacity:.95}
 #print .ins{font-size:7px;border:3px solid var(--yl);padding:5px 10px}
@@ -200,7 +202,7 @@ body.shake #app{animation:shake .18s ease-in-out 4}
   <div class="note" id="ttNote">TAP TO CONTINUE</div>
 </div>
 
-<script src="engine.js?v=2.0.1"></script>
-<script src="app.js?v=2.0.1"></script>
+<script src="engine.js?v=2.1.0"></script>
+<script src="app.js?v=2.1.0"></script>
 </body>
 </html>
