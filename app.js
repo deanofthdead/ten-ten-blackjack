@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.5.0';
+const VERSION = '1.6.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -390,7 +390,9 @@ async function playRound() {
   if (live) while (TT.dealerShouldHit(R.dealer)) {
     const dt = TT.total(R.dealer).t;
     if (dt >= 12 && dt <= 16) { hype("LET'S HAVE A TEN!"); await sleep(650); } // dealer on a stiff: a ten busts them
+    else await sleep(450); // dealer draws at a steadier pace
     await deal(R.dealer);
+    await sleep(350);
   }
   await sleep(250);
   const tenten = TT.isTenTenBust(R.dealer);
