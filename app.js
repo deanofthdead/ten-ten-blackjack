@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -338,6 +338,7 @@ async function playRound() {
   render();
   await deal(h.cards); await deal(R.dealer); await deal(h.cards); await deal(R.dealer, true);
   const up = R.dealer[0];
+  if (TT.val(up.r) <= 6) hype("LET'S HAVE A TEN!");
 
   // Insurance / even money: the book always says no.
   if (up.r === 'A') {
@@ -376,7 +377,11 @@ async function playRound() {
 
   reveal(); await sleep(500);
   const live = R.hands.some(x => TT.total(x.cards).t <= 21);
-  if (live) while (TT.dealerShouldHit(R.dealer)) await deal(R.dealer);
+  if (live) while (TT.dealerShouldHit(R.dealer)) {
+    const dt = TT.total(R.dealer).t;
+    if (dt >= 12 && dt <= 16) { hype("LET'S HAVE A TEN!"); await sleep(650); } // dealer on a stiff: a ten busts them
+    await deal(R.dealer);
+  }
   await sleep(250);
   const tenten = TT.isTenTenBust(R.dealer);
   if (tenten) await tenTenBust();
@@ -514,6 +519,13 @@ function confetti() {
   return () => { on = false; x.clearRect(0, 0, W, H); };
 }
 
+let hypeT = null;
+function hype(msg) {
+  const h = $('#hype'); h.textContent = msg;
+  h.classList.remove('show'); void h.offsetWidth; h.classList.add('show');
+  clearTimeout(hypeT); hypeT = setTimeout(() => h.classList.remove('show'), 1500);
+  tone(784, 0.08, 'square', 0.04); tone(1046, 0.12, 'square', 0.04, 0.08);
+}
 let toastT = null;
 function toast(msg, cls) {
   const t = $('#toast'); t.textContent = msg; t.className = 'show ' + (cls || '');
