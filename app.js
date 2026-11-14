@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.4.0';
+const VERSION = '2.4.1';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -396,7 +396,7 @@ async function playRound() {
   // Your decisions are done: if the dealer shows a bust card, call for a ten (stays up until the result).
   if (live && TT.val(R.dealer[0].r) <= 6) { hype(TEN_ASK, false, { sticky: true }); R.tenAsk = true; await sleep(700); }
   reveal();
-  if (R.tenAsk && TT.isTen(R.dealer[1])) tickerTape(); // we asked for a ten and the hole card is one
+  if (R.tenAsk && goodTen(R.dealer)) await tickerTape(); // we asked for a ten and the hole card is one
   await sleep(500);
   if (live) while (TT.dealerShouldHit(R.dealer)) {
     const dt = TT.total(R.dealer).t;
@@ -420,7 +420,7 @@ async function playRound() {
     }
     else await sleep(450); // dealer draws at a steadier pace
     await deal(R.dealer);
-    if (R.tenAsk && TT.isTen(R.dealer[R.dealer.length - 1])) tickerTape(); // the ten we called for
+    if (R.tenAsk && goodTen(R.dealer)) await tickerTape(); // the ten we called for: let it finish before the next card
     await sleep(350);
   }
   await sleep(250);
@@ -670,6 +670,13 @@ function hype(msg, quiet, opts) {
   banner.show(msg, Object.assign({ hold: 1500 }, opts));
   if (!quiet) { tone(784, 0.08, 'square', 0.04); tone(1046, 0.12, 'square', 0.04, 0.08); }
 }
+// A ten only counts as "the one we called for" if it's good for the player: the dealer busts, or is
+// still stuck on 12-16 and has to draw again. A ten that gives the dealer 17-21 is no celebration.
+function goodTen(cards) {
+  if (!TT.isTen(cards[cards.length - 1])) return false;
+  const t = TT.total(cards).t;
+  return t > 21 || (t >= 12 && t <= 16);
+}
 // Small ticker-tape pop over the felt (doesn't block the screen like a Ten Ten Bust).
 function tickerTape() {
   const table = $('#table'), c = $('#tape');
@@ -685,9 +692,9 @@ function tickerTape() {
       len: 2 + Math.floor(Math.random() * 4), ph: Math.random() * 6, sp: 0.15 + Math.random() * 0.25, c: cols[(Math.random() * cols.length) | 0] };
   });
   noise(0.08, 0.06); [988, 1319, 1568].forEach((f, i) => tone(f, 0.09, 'square', 0.04, i * 0.06));
-  const t0 = performance.now(), dur = 1700;
+  const t0 = performance.now(), dur = 1400;
   c.classList.add('on');
-  setTimeout(() => c.classList.remove('on'), dur + 300); // in case frames stop
+  const done = new Promise(res => setTimeout(() => { c.classList.remove('on'); res(); }, dur + 100)); // also covers stopped frames
   (function step(now) {
     const t = now - t0;
     x.clearRect(0, 0, W, H);
@@ -703,6 +710,7 @@ function tickerTape() {
     }
     requestAnimationFrame(step);
   })(t0);
+  return done;
 }
 let toastT = null;
 function toast(msg, cls) {
