@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.6.0';
+const VERSION = '1.7.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -490,7 +490,7 @@ function settleAll() {
   if (anyBJ) st.bj++;
   save();
   render();
-  if (units > 0) sfx.win(); else if (units < 0) sfx.lose(); else sfx.push();
+  if (units > 0) sfx.win(); else if (units < 0) { sfx.lose(); hype("DON'T WORRY,\nWE'RE BUILDING IT UP", true); } else sfx.push();
 }
 
 async function tenTenBust() {
@@ -532,11 +532,11 @@ function confetti() {
 }
 
 let hypeT = null;
-function hype(msg) {
+function hype(msg, quiet) {
   const h = $('#hype'); h.textContent = msg;
   h.classList.remove('show'); void h.offsetWidth; h.classList.add('show');
-  clearTimeout(hypeT); hypeT = setTimeout(() => h.classList.remove('show'), 1500);
-  tone(784, 0.08, 'square', 0.04); tone(1046, 0.12, 'square', 0.04, 0.08);
+  clearTimeout(hypeT); hypeT = setTimeout(() => h.classList.remove('show'), 2200);
+  if (!quiet) { tone(784, 0.08, 'square', 0.04); tone(1046, 0.12, 'square', 0.04, 0.08); }
 }
 let toastT = null;
 function toast(msg, cls) {

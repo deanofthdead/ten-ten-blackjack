@@ -90,9 +90,9 @@ img{image-rendering:pixelated;image-rendering:crisp-edges}
 /* Toast */
 #toast{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-size:12px;padding:8px 10px;border:3px solid #000;background:#000;color:var(--yl);display:none;z-index:5;white-space:nowrap;box-shadow:4px 4px 0 #0008}
 #toast.ok{color:var(--gr)}#toast.bad{color:#ff7a6a}
-#hype{position:absolute;left:50%;top:calc(var(--k) * 35px + 64px);transform:translateX(-50%);font-size:15px;color:var(--yl);white-space:nowrap;z-index:4;pointer-events:none;
+#hype{position:absolute;left:50%;top:calc(var(--k) * 35px + 64px);transform:translateX(-50%);font-size:15px;color:var(--yl);white-space:pre;text-align:center;line-height:1.6;z-index:4;pointer-events:none;
   text-shadow:3px 3px 0 #000,-2px -2px 0 #000,2px -2px 0 #000,-2px 2px 0 #000;opacity:0}
-#hype.show{animation:hype 1.5s cubic-bezier(.2,.9,.3,1.2) both}
+#hype.show{animation:hype 2.2s cubic-bezier(.2,.9,.3,1.2) both}
 @keyframes hype{0%{opacity:0;transform:translateX(-50%) scale(.4) rotate(-6deg)}15%{opacity:1;transform:translateX(-50%) scale(1.12) rotate(3deg)}25%{transform:translateX(-50%) scale(1) rotate(-2deg)}80%{opacity:1;transform:translateX(-50%) scale(1) rotate(-2deg)}100%{opacity:0;transform:translateX(-50%) translateY(-10px) scale(.95) rotate(-2deg)}}
 #toast.show{display:block;animation:pop .28s cubic-bezier(.3,1.5,.5,1) both}
 @keyframes pop{from{transform:translate(-50%,-50%) scale(.5);opacity:0}}
