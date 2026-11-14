@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -46,9 +46,9 @@ function bits(x, rows, ox, oy, col, rot, W, H) {
     if (rot) x.fillRect(W - 1 - (ox + i), H - 1 - (oy + y), 1, 1); else x.fillRect(ox + i, oy + y, 1, 1);
   } });
 }
-// Cards are drawn at 50x70 art pixels (twice the old resolution) and shown at the same size,
-// so the pixel look stays but ranks get a clear 5x7 font drawn at 2x.
-const CARD_W = 50, CARD_H = 70;
+// Cards are drawn at 100x140 art pixels (4x the first version) and scaled to fit, so the
+// pixel look stays but ranks and suits are crisp: a bold 5x7 rank at 3x, 11px suit shapes.
+const CARD_W = 100, CARD_H = 140;
 const BIG = {
   A: ['.XXX.', 'X...X', 'X...X', 'XXXXX', 'X...X', 'X...X', 'X...X'],
   2: ['.XXX.', 'X...X', '....X', '...X.', '..X..', '.X...', 'XXXXX'],
@@ -65,25 +65,30 @@ const BIG = {
   Q: ['.XXX.', 'X...X', 'X...X', 'X...X', 'X.X.X', 'X..X.', '.XX.X'],
   K: ['X...X', 'X..X.', 'X.X..', 'XX...', 'X.X..', 'X..X.', 'X...X'],
 };
-// Draw a bitmap at integer scale; rot draws it rotated 180° about the card centre.
-function blit(x, rows, ox, oy, col, sc, rot) {
+const PIP11 = {
+  H: ['.XXX...XXX.', 'XXXXX.XXXXX', 'XXXXXXXXXXX', 'XXXXXXXXXXX', 'XXXXXXXXXXX', '.XXXXXXXXX.', '..XXXXXXX..', '...XXXXX...', '....XXX....', '.....X.....'],
+  D: ['.....X.....', '....XXX....', '...XXXXX...', '..XXXXXXX..', '.XXXXXXXXX.', 'XXXXXXXXXXX', '.XXXXXXXXX.', '..XXXXXXX..', '...XXXXX...', '....XXX....', '.....X.....'],
+  S: ['.....X.....', '....XXX....', '...XXXXX...', '..XXXXXXX..', '.XXXXXXXXX.', 'XXXXXXXXXXX', 'XXXXXXXXXXX', 'XXXXXXXXXXX', '.XXX.X.XXX.', '.....X.....', '....XXX....', '..XXXXXXX..'],
+  C: ['....XXX....', '...XXXXX...', '...XXXXX...', '...XXXXX...', '.XX.XXX.XX.', 'XXXXXXXXXXX', 'XXXXXXXXXXX', 'XXXXXXXXXXX', '.XX..X..XX.', '.....X.....', '....XXX....', '..XXXXXXX..'],
+};
+const CROWN11 = ['X....X....X', 'XX..XXX..XX', 'XXX.XXX.XXX', 'XXXXXXXXXXX', 'XXXXXXXXXXX', 'XXXXXXXXXXX'];
+function blit(x, rows, ox, oy, col, sc) {
   sc = sc || 1; x.fillStyle = col;
-  rows.forEach((row, y) => { for (let i = 0; i < row.length; i++) if (row[i] === 'X') {
-    const px = ox + i * sc, py = oy + y * sc;
-    if (rot) x.fillRect(CARD_W - px - sc, CARD_H - py - sc, sc, sc); else x.fillRect(px, py, sc, sc);
-  } });
+  rows.forEach((row, y) => { for (let i = 0; i < row.length; i++) if (row[i] === 'X') x.fillRect(ox + i * sc, oy + y * sc, sc, sc); });
 }
 function cardShape(x, edge, fill) {
   const W = CARD_W, H = CARD_H;
-  x.fillStyle = edge; x.fillRect(2, 0, W - 4, H); x.fillRect(1, 1, W - 2, H - 2); x.fillRect(0, 2, W, H - 4);
-  x.fillStyle = fill; x.fillRect(3, 2, W - 6, H - 4); x.fillRect(2, 3, W - 4, H - 6);
+  x.fillStyle = edge;
+  x.fillRect(4, 0, W - 8, H); x.fillRect(2, 1, W - 4, H - 2); x.fillRect(1, 2, W - 2, H - 4); x.fillRect(0, 4, W, H - 8);
+  x.fillStyle = fill;
+  x.fillRect(5, 2, W - 10, H - 4); x.fillRect(3, 3, W - 6, H - 6); x.fillRect(2, 5, W - 4, H - 10);
 }
 function rankWidth(glyphs, sc) { return glyphs.reduce((w, g) => w + BIG[g][0].length * sc, 0) + (glyphs.length - 1) * sc; }
-function drawRank(x, glyphs, ox, oy, col, sc, rot) {
+function drawRank(x, glyphs, ox, oy, col, sc) {
   let gx = ox;
   for (const g of glyphs) {
-    blit(x, BIG[g], gx, oy, col, sc, rot);
-    if (sc > 1) blit(x, BIG[g], gx + 1, oy, col, sc, rot); // faux bold for the big index
+    blit(x, BIG[g], gx, oy, col, sc);
+    blit(x, BIG[g], gx + 1, oy, col, sc); // faux bold
     gx += BIG[g][0].length * sc + sc;
   }
 }
@@ -93,24 +98,27 @@ function cardSrc(card) {
   if (imgCache[k]) return imgCache[k];
   const [c, x] = canvas(CARD_W, CARD_H);
   const col = (card.s === 'H' || card.s === 'D') ? RED : BLK;
+  const pip = PIP11[card.s];
   cardShape(x, BLK, PAPER);
   const glyphs = card.r === '10' ? ['1', '0'] : [card.r];
-  // Top-left: big 2x rank and suit, the bit you read when cards overlap.
-  drawRank(x, glyphs, 4, 4, col, 2, false);
-  blit(x, PIP7[card.s], 4, 21, col, 1, false);
-  // Bottom-right: smaller upright index (upright so a 6 never reads as a 9).
-  const sw = rankWidth(glyphs, 1);
-  drawRank(x, glyphs, CARD_W - 4 - sw, CARD_H - 11, col, 1, false);
-  blit(x, PIP7[card.s], CARD_W - 11, CARD_H - 20, col, 1, false);
+  // Top-left index: the part you read when cards overlap.
+  drawRank(x, glyphs, 7, 7, col, 3);
+  blit(x, pip, 7, 33, col, 1);
+  // Bottom-right index, upright so a 6 never reads as a 9.
+  const sw = rankWidth(glyphs, 2) + 1;
+  drawRank(x, glyphs, CARD_W - 7 - sw, CARD_H - 21, col, 2);
+  blit(x, pip, CARD_W - 18, CARD_H - 38, col, 1);
   if (card.r === 'J' || card.r === 'Q' || card.r === 'K') {
-    x.fillStyle = col; x.fillRect(14, 22, 23, 33); x.fillStyle = '#fff6d2'; x.fillRect(15, 23, 21, 31);
-    blit(x, CROWN, 18, 26, GOLD, 2, false);
-    x.fillStyle = BLK; x.fillRect(22, 29, 2, 2); x.fillRect(28, 29, 2, 2);
-    blit(x, PIP7[card.s], 18, 37, col, 2, false);
+    x.fillStyle = col; x.fillRect(27, 46, 46, 66); x.fillStyle = '#fff6d2'; x.fillRect(29, 48, 42, 62);
+    blit(x, CROWN11, 39, 54, GOLD, 2);
+    x.fillStyle = '#c0391e'; x.fillRect(49, 62, 2, 2); x.fillStyle = '#2f62d8'; x.fillRect(41, 62, 2, 2); x.fillRect(57, 62, 2, 2);
+    blit(x, pip, 39, 69, col, 2);
+    const lw = rankWidth([card.r], 2) + 1;
+    drawRank(x, [card.r], 50 - Math.floor(lw / 2), 95, col, 2);
   } else if (card.r === 'A') {
-    blit(x, PIP7[card.s], 15, 25, col, 3, false);
+    blit(x, pip, 28, 46, col, 4);
   } else {
-    blit(x, PIP7[card.s], 18, 30, col, 2, false);
+    blit(x, pip, 34, 52, col, 3);
   }
   return (imgCache[k] = c.toDataURL());
 }
@@ -120,11 +128,13 @@ function backSrc() {
   const [c, x] = canvas(CARD_W, CARD_H);
   cardShape(x, BLK, '#9c1d2a');
   x.fillStyle = '#c8303f';
-  for (let yy = 6; yy < CARD_H - 6; yy++) for (let xx = 6; xx < CARD_W - 6; xx++) if ((xx + yy) % 6 < 2 || (xx - yy + 600) % 6 < 2) x.fillRect(xx, yy, 1, 1);
-  x.fillStyle = GOLD; x.fillRect(4, 4, CARD_W - 8, 2); x.fillRect(4, CARD_H - 6, CARD_W - 8, 2); x.fillRect(4, 4, 2, CARD_H - 8); x.fillRect(CARD_W - 6, 4, 2, CARD_H - 8);
-  const g = ['1', '0', '1', '0'], w = rankWidth(g, 1);
-  x.fillStyle = '#9c1d2a'; x.fillRect((CARD_W - w) / 2 - 3, 27, w + 6, 13);
-  drawRank(x, g, (CARD_W - w) / 2, 30, GOLD, 1, false);
+  for (let yy = 10; yy < CARD_H - 10; yy++) for (let xx = 10; xx < CARD_W - 10; xx++) if ((xx + yy) % 8 < 2 || (xx - yy + 800) % 8 < 2) x.fillRect(xx, yy, 1, 1);
+  x.fillStyle = GOLD;
+  x.fillRect(7, 7, CARD_W - 14, 2); x.fillRect(7, CARD_H - 9, CARD_W - 14, 2); x.fillRect(7, 7, 2, CARD_H - 14); x.fillRect(CARD_W - 9, 7, 2, CARD_H - 14);
+  const g = ['1', '0', '1', '0'], w = rankWidth(g, 2) + 1;
+  x.fillStyle = '#9c1d2a'; x.fillRect((CARD_W - w) / 2 - 5, 57, w + 10, 24);
+  x.fillStyle = GOLD; x.fillRect((CARD_W - w) / 2 - 5, 57, w + 10, 1); x.fillRect((CARD_W - w) / 2 - 5, 80, w + 10, 1);
+  drawRank(x, g, (CARD_W - w) / 2, 62, GOLD, 2);
   return (BACK_SRC = c.toDataURL());
 }
 const chipCache = {};

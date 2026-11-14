@@ -51,7 +51,7 @@ img{image-rendering:pixelated;image-rendering:crisp-edges}
 .label{font-size:9px;background:#0009;padding:4px 6px;border:2px solid #0006;min-height:21px;white-space:nowrap}
 .label b{color:var(--yl);font-weight:normal}
 .cards{display:flex;justify-content:center;min-height:calc(35px * var(--k))}
-.card{width:calc(25px * var(--k));height:calc(35px * var(--k));display:block;filter:drop-shadow(calc(1px * var(--k)) calc(1px * var(--k)) 0 #0007)}
+.card{image-rendering:auto;width:calc(25px * var(--k));height:calc(35px * var(--k));display:block;filter:drop-shadow(calc(1px * var(--k)) calc(1px * var(--k)) 0 #0007)}
 .card+.card{margin-left:calc(-11px * var(--k))}
 .card.deal{animation:dealin .42s cubic-bezier(.2,.75,.25,1) both;will-change:transform,opacity}
 .card.flip{animation:flip .36s ease-in-out both}
