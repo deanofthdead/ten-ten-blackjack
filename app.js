@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.4.1';
+const VERSION = '2.5.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -486,6 +486,7 @@ function record(ok, what) {
     toast('BOOK ✓ ' + (what || ''), 'ok'); sfx.ok();
   } else {
     st.bookStreak = 0; sfx.bad();
+    if (R) R.offBook = true; // remembered for this hand ("EGG" if you win anyway)
   }
   save(); renderHud();
 }
@@ -522,7 +523,7 @@ function settleAll() {
   S.lastLost = units < 0;
   // Results stay as the stamps on the hand boxes; the felt banner only carries the hype lines.
   banner.release(TEN_ASK); // the result is in
-  if (units > 0) sfx.win();
+  if (units > 0) { sfx.win(); if (R.offBook) banner.show('EGG', { replace: true, hold: 1400 }); } // off book but won anyway
   else if (units < 0) {
     sfx.lose();
     banner.show("DON'T WORRY,", { hold: 1000, replace: true });
