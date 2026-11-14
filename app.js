@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.2.0';
+const VERSION = '2.3.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -395,7 +395,9 @@ async function playRound() {
   const live = R.hands.some(x => TT.total(x.cards).t <= 21);
   // Your decisions are done: if the dealer shows a bust card, call for a ten (stays up until the result).
   if (live && TT.val(R.dealer[0].r) <= 6) { hype(TEN_ASK, false, { sticky: true }); R.tenAsk = true; await sleep(700); }
-  reveal(); await sleep(500);
+  reveal();
+  if (R.tenAsk && TT.isTen(R.dealer[1])) tickerTape(); // we asked for a ten and the hole card is one
+  await sleep(500);
   if (live) while (TT.dealerShouldHit(R.dealer)) {
     const dt = TT.total(R.dealer).t;
     if (dt >= 12 && dt <= 16) { // dealer on a stiff: a ten busts them
@@ -409,6 +411,7 @@ async function playRound() {
     }
     else await sleep(450); // dealer draws at a steadier pace
     await deal(R.dealer);
+    if (R.tenAsk && TT.isTen(R.dealer[R.dealer.length - 1])) tickerTape(); // the ten we called for
     await sleep(350);
   }
   await sleep(250);
@@ -649,6 +652,40 @@ const TEN_ASK = "LET'S HAVE A TEN!";
 function hype(msg, quiet, opts) {
   banner.show(msg, Object.assign({ hold: 1500 }, opts));
   if (!quiet) { tone(784, 0.08, 'square', 0.04); tone(1046, 0.12, 'square', 0.04, 0.08); }
+}
+// Small ticker-tape pop over the felt (doesn't block the screen like a Ten Ten Bust).
+function tickerTape() {
+  const table = $('#table'), c = $('#tape');
+  const W = Math.round(table.clientWidth / 3), H = Math.round(table.clientHeight / 3);
+  c.width = W; c.height = H;
+  const x = c.getContext('2d');
+  const svg = document.querySelector('#print svg').getBoundingClientRect(), tr = table.getBoundingClientRect();
+  const ox = (svg.left + svg.width / 2 - tr.left) / 3, oy = (svg.top + svg.height * 0.45 - tr.top) / 3;
+  const cols = ['#ffd23a', '#ffffff', '#4fc35a', '#4f86ff', '#e2402f', '#ff9a3c', '#ff5fe0'];
+  const bits = Array.from({ length: 70 }, () => {
+    const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4, v = 1.6 + Math.random() * 2.6;
+    return { x: ox + (Math.random() - 0.5) * 30, y: oy, vx: Math.cos(a) * v, vy: Math.sin(a) * v,
+      len: 2 + Math.floor(Math.random() * 4), ph: Math.random() * 6, sp: 0.15 + Math.random() * 0.25, c: cols[(Math.random() * cols.length) | 0] };
+  });
+  noise(0.08, 0.06); [988, 1319, 1568].forEach((f, i) => tone(f, 0.09, 'square', 0.04, i * 0.06));
+  const t0 = performance.now(), dur = 1700;
+  c.classList.add('on');
+  setTimeout(() => c.classList.remove('on'), dur + 300); // in case frames stop
+  (function step(now) {
+    const t = now - t0;
+    x.clearRect(0, 0, W, H);
+    if (t > dur) { c.classList.remove('on'); return; }
+    x.globalAlpha = t > dur - 400 ? (dur - t) / 400 : 1;
+    for (const b of bits) {
+      b.vy += 0.07; b.vx *= 0.985; b.vy *= 0.985; b.vy = Math.min(b.vy, 0.9);
+      b.x += b.vx + Math.sin(b.ph) * 0.3; b.y += b.vy; b.ph += b.sp;
+      const flip = Math.cos(b.ph); // ribbon twisting: long one way, then the other
+      x.fillStyle = b.c;
+      if (Math.abs(flip) > 0.5) x.fillRect(Math.round(b.x), Math.round(b.y), 1, b.len);
+      else x.fillRect(Math.round(b.x), Math.round(b.y), Math.max(1, Math.round(b.len * 0.6)), 1);
+    }
+    requestAnimationFrame(step);
+  })(t0);
 }
 let toastT = null;
 function toast(msg, cls) {
