@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.7.0';
+const VERSION = '1.8.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -304,6 +304,7 @@ async function runSession() {
     render();
     const over = S.handNo >= SESSION_HANDS || (isDaily() && S.chips < TABLE_MIN);
     await waitFor([{ id: 'next', label: over ? 'SEE RESULTS' : 'NEXT HAND', cls: 'dark' }]);
+    if (!over && S.lastLost) hype('BRICK BY BRICK'); // only after a defeat
   }
   finishSession();
 }
@@ -490,6 +491,7 @@ function settleAll() {
   if (anyBJ) st.bj++;
   save();
   render();
+  S.lastLost = units < 0;
   if (units > 0) sfx.win(); else if (units < 0) { sfx.lose(); hype("DON'T WORRY,\nWE'RE BUILDING IT UP", true); } else sfx.push();
 }
 

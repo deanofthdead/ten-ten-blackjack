@@ -1,7 +1,7 @@
 // Offline-first shell: everything the game needs is cached on install, including the pixel font,
 // so the home-screen app works with no signal. Same-origin files are refreshed from the network
 // when it's available (bypassing the HTTP cache) so updates land; otherwise the cache answers.
-const CACHE = 'ttbj-v8';
+const CACHE = 'ttbj-v9';
 const CORE = ['./', 'index.html', 'engine.js', 'app.js', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'favicon-32.png'];
 const FONT_CSS = 'https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap';
 
