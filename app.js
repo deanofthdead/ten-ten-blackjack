@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.3.0';
+const VERSION = '2.4.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -402,12 +402,21 @@ async function playRound() {
     const dt = TT.total(R.dealer).t;
     if (dt >= 12 && dt <= 16) { // dealer on a stiff: a ten busts them
       const last = R.dealer[R.dealer.length - 1];
-      if (R.tenAsk && !TT.isTen(last)) R.tenLevel = (R.tenLevel || 0) + 1; // we asked for a ten and didn't get one: turn it up
+      const asked = R.tenAsk;
+      if (asked && !TT.isTen(last)) R.tenLevel = (R.tenLevel || 0) + 1; // we asked for a ten and didn't get one: turn it up
       R.tenAsk = true;
       const lv = R.tenLevel || 0;
       hype(TEN_ASK, lv > 0, { level: lv, sticky: true });
-      if (lv) [0, 1, 2].forEach(i => tone(520 + 120 * lv + 90 * i, 0.07, 'square', 0.045, i * 0.07));
-      await sleep(650);
+      if (asked && TT.isTen(last)) {
+        // A ten just landed and they're still drawing: one more ten is a TEN TEN BUST.
+        // Swell the call slowly and hold the next card to build the tension.
+        banner.swell(TEN_ASK, 1.4, 2200);
+        [0, 1, 2, 3].forEach(i => { tone(98, 0.12, 'triangle', 0.12, i * 0.55); tone(82, 0.14, 'triangle', 0.1, i * 0.55 + 0.16); });
+        await sleep(2300);
+      } else {
+        if (lv) [0, 1, 2].forEach(i => tone(520 + 120 * lv + 90 * i, 0.07, 'square', 0.045, i * 0.07));
+        await sleep(650);
+      }
     }
     else await sleep(450); // dealer draws at a steadier pace
     await deal(R.dealer);
@@ -638,6 +647,14 @@ const banner = (() => {
       if (opts.replace) { queue.length = 0; if (showing && showing !== TITLE) interrupt = true; }
       queue.push({ text, cls: opts.cls || '', hold, level: opts.level || 0 });
       pump();
+    },
+    // Slowly grow a message that's on screen (tension before a possible Ten Ten).
+    swell(text, factor, dur) {
+      const it = [showing, entering].find(x => x && x.text === text);
+      if (!it) return;
+      const from = parseFloat(txt.style.fontSize) || 16, to = Math.min(40, from * factor);
+      const ease = p => p < 0.5 ? 2 * p * p : 1 - Math.pow(-2 * p + 2, 2) / 2;
+      tween(dur, ease, p => { if (tp.textContent === text) txt.style.fontSize = (from + (to - from) * p).toFixed(2) + 'px'; });
     },
     // Let a sticky message go (e.g. the hand's result is in): it glides off and the title returns.
     release(text) {
