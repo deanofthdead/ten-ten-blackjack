@@ -98,4 +98,14 @@ t('settle and payout', () => {
 t('daily seed is date based', () => {
   assert.strictEqual(TT.dailySeed(TT.dailyKey(new Date('2026-11-14T23:00:00Z'))), 'DAILY-2026-11-14');
 });
+t('practice hands', () => {
+  for (let i = 0; i < 300; i++) {
+    const a = TT.practiceCards('P' + i, 'soft', i % 25);
+    assert.ok(a.some(c => c.r === 'A') && TT.total(a).soft && TT.total(a).t >= 13 && TT.total(a).t <= 20, JSON.stringify(a));
+    const b = TT.practiceCards('P' + i, 'split', i % 25);
+    assert.ok(TT.isPair(b), JSON.stringify(b));
+  }
+  assert.deepStrictEqual(TT.practiceCards('X', 'soft', 3), TT.practiceCards('X', 'soft', 3));
+  assert.strictEqual(TT.practiceCards('X', 'main', 3), null);
+});
 console.log(`ok ${n} tests`);

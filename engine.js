@@ -218,6 +218,30 @@
 
   const INSURANCE_WHY = 'Never take insurance. It\'s a side bet that the dealer\'s hole card is a ten. Only 4 in 13 cards are tens, but it pays just 2 to 1, so it loses money over time. Even money on a blackjack is the same bet in disguise.';
 
+  // ---- Practice modes ------------------------------------------------------
+  // The player's first two cards in Soft / Split practice. Drawn from their own seeded stream
+  // per hand (so they never disturb the shoe), everything after them comes from the shoe.
+  const PRACTICE = { soft: 'SOFT PRACTICE', split: 'SPLIT PRACTICE' };
+  function practiceCards(seed, mode, handNo) {
+    const rng = rngFor(seed + ':' + mode + ':' + handNo);
+    const pick = a => a[Math.floor(rng() * a.length)];
+    const suit = () => pick(SUITS);
+    if (mode === 'soft') {
+      // Ace plus 2-9: every soft total from 13 to 20 (Ace-ten would just be blackjack).
+      const other = pick(['2', '3', '4', '5', '6', '7', '8', '9']);
+      const cards = [{ r: 'A', s: suit() }, { r: other, s: suit() }];
+      return rng() < 0.5 ? cards : cards.reverse();
+    }
+    if (mode === 'split') {
+      // Weight ranks by value so tens (10, J, Q, K) come up as often as any other pair.
+      const v = pick(['A', '2', '3', '4', '5', '6', '7', '8', '9', 'T']);
+      const r = v === 'T' ? pick(['10', 'J', 'Q', 'K']) : v;
+      const r2 = v === 'T' && rng() < 0.4 ? pick(['10', 'J', 'Q', 'K']) : r;
+      return [{ r, s: suit() }, { r: r2, s: suit() }];
+    }
+    return null;
+  }
+
   // ---- Settlement ----------------------------------------------------------
   // Returns 'bj' | 'win' | 'push' | 'lose' for one player hand against the dealer's final hand.
   function settle(hand, dealerCards) {
@@ -243,7 +267,7 @@
     RANKS, SUITS, DECKS, HANDS_PER_SESSION, MAX_HANDS, NAMES, INSURANCE_WHY,
     rngFor, randomSeed, cleanSeed, dailyKey, dailySeed, Shoe,
     val, isTen, total, isBlackjack, upName, dealerShouldHit, isTenTenBust,
-    pairCode, softCode, hardCode, isPair, book, handLabel, settle, payout,
+    pairCode, softCode, hardCode, isPair, book, handLabel, settle, payout, PRACTICE, practiceCards,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TT = api;

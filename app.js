@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.8.0';
+const VERSION = '1.9.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -309,8 +309,9 @@ async function runSession() {
   finishSession();
 }
 
-function deal(arr, down) {
-  const c = S.shoe.draw(); c.fresh = true; arr.push(c);
+function deal(arr, down) { return dealCard(arr, S.shoe.draw(), down); }
+function dealCard(arr, c, down) {
+  c.fresh = true; arr.push(c);
   sfx.deal(); render();
   return sleep(down ? 260 : 300);
 }
@@ -347,7 +348,12 @@ async function playRound() {
   const h = { cards: [], bet, units: 1, split: false };
   R.hands = [h];
   render();
-  await deal(h.cards); await deal(R.dealer); await deal(h.cards); await deal(R.dealer, true);
+  const fixed = TT.practiceCards(S.seed, S.mode, S.handNo); // soft / split practice
+  if (fixed) {
+    await dealCard(h.cards, fixed[0]); await deal(R.dealer); await dealCard(h.cards, fixed[1]); await deal(R.dealer, true);
+  } else {
+    await deal(h.cards); await deal(R.dealer); await deal(h.cards); await deal(R.dealer, true);
+  }
   const up = R.dealer[0];
   if (TT.val(up.r) <= 6) hype("LET'S HAVE A TEN!");
 
@@ -564,7 +570,7 @@ function renderHud() {
   if (!S) return;
   $('#handNo').textContent = Math.min(S.roundDone ? S.handNo : S.handNo + 1, SESSION_HANDS) + '/' + SESSION_HANDS;
   $('#chips').textContent = money(S.chips);
-  $('#seed').textContent = S.mode === 'daily' ? 'DAILY' : S.seed;
+  $('#seed').textContent = S.mode === 'daily' ? 'DAILY' : (S.mode === 'soft' ? 'SOFT ' : S.mode === 'split' ? 'SPLIT ' : 'SEED ') + S.seed;
   $('#winStreak').textContent = S.stats.winStreak;
   $('#bookStreak').textContent = S.stats.bookStreak;
 }
@@ -652,7 +658,7 @@ function shareText() {
     return 'Ten Ten Blackjack Daily ' + dailyLabel(S.dailyKey) + ': ' + money(S.chips) + ' from ' + money(DAILY_START) +
       ' · book ' + pct(st.ok, st.dec) + (st.tenten ? ' · ' + st.tenten + '× Ten Ten Bust' : '') + ' (play chips only)';
   }
-  return 'Ten Ten Blackjack seed ' + S.seed + ': won ' + st.won + '/' + S.handNo + ', book ' + pct(st.ok, st.dec) +
+  return 'Ten Ten Blackjack ' + (TT.PRACTICE[S.mode] ? TT.PRACTICE[S.mode].toLowerCase() + ' ' : '') + 'seed ' + S.seed + ': won ' + st.won + '/' + S.handNo + ', book ' + pct(st.ok, st.dec) +
     ', best book streak ' + st.bestBook + (st.tenten ? ', ' + st.tenten + '× Ten Ten Bust' : '') + '. Same cards, your turn:';
 }
 async function finishSession() {
@@ -663,7 +669,7 @@ async function finishSession() {
   save();
   const daily = S.mode === 'daily';
   const broke = daily && S.chips < TABLE_MIN && S.handNo < SESSION_HANDS;
-  let html = '<h2>' + (daily ? 'DAILY ' + dailyLabel(S.dailyKey) : 'SESSION COMPLETE') + '</h2>';
+  let html = '<h2>' + (daily ? 'DAILY ' + dailyLabel(S.dailyKey) : (TT.PRACTICE[S.mode] || 'SESSION') + ' COMPLETE') + '</h2>';
   if (daily) html += '<div class="big">' + money(S.chips) + '</div>' + (broke ? '<p>Out of chips after ' + S.handNo + ' hands.</p>' : '');
   html += [
     ['SEED', daily ? 'DAILY' : S.seed], ['HANDS', S.handNo], ['WON / LOST / PUSH', st.won + ' / ' + st.lost + ' / ' + st.push],
@@ -679,8 +685,8 @@ async function finishSession() {
       { id: 'again', label: daily ? 'PLAY TODAY AGAIN (PRACTICE)' : 'REPLAY THIS SEED', cls: 'stand', always: true },
       { id: 'menu', label: 'MENU', cls: 'dark', always: true },
     ]);
-    if (id === 'share') { await share(shareText(), shareURL(daily ? '?daily' : '?s=' + encodeURIComponent(S.seed))); continue; }
-    if (id === 'again') { daily ? startSession('daily') : startSession('main', S.seed); return; }
+    if (id === 'share') { await share(shareText(), shareURL(daily ? '?daily' : '?s=' + encodeURIComponent(S.seed) + (TT.PRACTICE[S.mode] ? '&m=' + S.mode : ''))); continue; }
+    if (id === 'again') { daily ? startSession('daily') : startSession(S.mode, S.seed); return; }
     openMenu(); return;
   }
 }
@@ -695,9 +701,12 @@ function openMenu(note) {
   let h = '<div class="logo">TEN TEN<small>BLACKJACK</small></div>' +
     '<div class="tag">LEARN THE BOOK.<br>PLAY THE WHOLE GAME.</div>' + (note ? '<p class="say" style="text-align:center">' + esc(note) + '</p>' : '') + '<div class="btns">';
   if (inSession && S.handNo < SESSION_HANDS) h += '<button class="btn dbl" data-a="back">BACK TO TABLE · HAND ' + (S.handNo + 1) + '</button>';
-  else if (cur) h += '<button class="btn dbl" data-a="resume">CONTINUE ' + (cur.mode === 'daily' ? 'DAILY' : 'SEED ' + esc(cur.seed)) + ' · HAND ' + (cur.handNo + 1) + '</button>';
+  else if (cur) h += '<button class="btn dbl" data-a="resume">CONTINUE ' + (cur.mode === 'daily' ? 'DAILY' : (TT.PRACTICE[cur.mode] ? cur.mode.toUpperCase() + ' ' : 'SEED ') + esc(cur.seed)) + ' · HAND ' + (cur.handNo + 1) + '</button>';
   h += '<button class="btn stand" data-a="new">NEW SESSION · 25 HANDS</button>' +
     '<button class="btn dark" data-a="seed">PLAY A SEED</button>' +
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">' +
+    '<button class="btn dbl" data-a="soft">SOFT<br>PRACTICE<small>ACE + ANOTHER</small></button>' +
+    '<button class="btn split" data-a="split">SPLIT<br>PRACTICE<small>ALWAYS A PAIR</small></button></div>' +
     '<button class="btn hit" data-a="daily">DAILY · ' + dailyLabel(key) + (dr ? '<small>YOUR SCORE ' + money(dr.chips) + ' · BOOK ' + esc(dr.book) + '</small>' : '<small>£500 PLAY CHIPS · £250 TABLE MAX</small>') + '</button>' +
     '<button class="btn split" data-a="chart">BOOK CHART</button>' +
     '<button class="btn dark" data-a="how">HOW IT WORKS</button></div>' +
@@ -714,17 +723,19 @@ function menuAction(a) {
   if (a === 'resume') { const cur = P.cur; return startSession(cur.mode, cur.seed, Object.assign({}, cur, { stats: Object.assign(newStats(), cur.stats) })); }
   if (a === 'new') return startSession('main', TT.randomSeed());
   if (a === 'daily') return startSession('daily');
+  if (a === 'soft' || a === 'split') return startSession(a, TT.randomSeed());
   if (a === 'sound') { P.sound = !P.sound; save(); return openMenu(); }
   if (a === 'seed') return askSeed();
   if (a === 'chart') return showChart();
   if (a === 'how') return showHow();
 }
-async function askSeed(prefill) {
+async function askSeed(prefill, mode) {
+  mode = TT.PRACTICE[mode] ? mode : 'main';
   closeMenu();
-  const id = await modal('<h2>PLAY A SEED</h2><p>Type the seed someone shared with you. Same seed, same cards, in the same order.</p><input id="seedIn" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false" value="' + esc(prefill || '') + '">',
+  const id = await modal('<h2>' + (mode === 'main' ? 'PLAY A SEED' : TT.PRACTICE[mode] + ' SEED') + '</h2><p>Type the seed someone shared with you. Same seed, same cards, in the same order.</p><input id="seedIn" maxlength="24" autocomplete="off" autocapitalize="characters" spellcheck="false" value="' + esc(prefill || '') + '">',
     [{ id: 'go', label: 'PLAY', cls: 'stand', always: true }, { id: 'x', label: 'BACK', cls: 'dark', always: true }]);
   const v = TT.cleanSeed(($('#seedIn') || {}).value);
-  if (id === 'go' && v) startSession('main', v); else openMenu();
+  if (id === 'go' && v) startSession(mode, v); else openMenu();
 }
 function chartHTML() {
   const ups = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'A'];
@@ -751,6 +762,7 @@ async function showHow() {
     '<p>Every session is 25 hands from one shuffled shoe. The shoe comes from the session\'s seed, so anyone who plays the same seed gets the same cards in the same order. Share yours from the results screen.</p>' +
     '<p>Each time you act, your play is checked against the book (basic strategy). Get it right and your BOOK STREAK grows. Get it wrong and you\'ll see what the book says and why, then your move is played: no take-backs.</p>' +
     '<p>Win a hand and your WIN STREAK grows. A push keeps it going; a loss resets it.</p>' +
+    '<h3>SOFT & SPLIT PRACTICE</h3><p>25-hand sessions with no betting that drill the tricky hands. In Soft Practice your first two cards are always an Ace and a 2 to 9; in Split Practice they are always a pair. The dealer\'s hand and every card after that come from the normal shoe, and these sessions have seeds you can share too.</p>' +
     '<h3>TEN TEN BUST</h3><p>If the dealer busts and the last two cards they drew are both tens or picture cards, it\'s a TEN TEN BUST.</p>' +
     '<h3>DAILY</h3><p>One shared shoe for everyone each day (by UTC date), with £500 in play chips and a £250 table maximum (£10 minimum). Share your chip total at the end. Your first finish of the day is your score.</p>' +
     '<h3>TABLE RULES</h3><p>6 decks. Dealer stands on all 17s and peeks for blackjack. Blackjack pays 3 to 2. Double on any first two cards, including after a split. Split up to 4 hands; split Aces get one card each and can\'t be resplit. No surrender. Insurance pays 2 to 1.</p>' +
@@ -769,7 +781,7 @@ $('#menuBtn').onclick = () => { sfx.click(); openMenu(); };
   if (q.toString()) history.replaceState(null, '', location.pathname);
   R = { dealer: [], hands: [], active: -1, hole: true };
   S = null;
-  if (sharedSeed) { openMenu(); askSeed(sharedSeed); return; }
+  if (sharedSeed) { openMenu(); askSeed(sharedSeed, q.get('m')); return; }
   openMenu(wantDaily ? 'TODAY\'S DAILY IS WAITING' : '');
 })();
 
