@@ -12,6 +12,7 @@ A retro pixel blackjack trainer for iPhone that lets you play the whole game. Ev
 - **Sessions** are 25 hands from one seeded 6-deck shoe. Same seed, same cards in the same order. Share a seed with a link like `…/ten-ten-blackjack/?s=K7Q2XB`.
 - **Book streak** counts consecutive book-correct decisions (hit, stand, double, split, and turning down insurance). **Win streak** counts hands won in a row; a push keeps it alive.
 - **Main mode** has no betting at all, only decisions.
+- **Soft Practice** and **Split Practice** are 25-hand sessions (no betting) where your first two cards are always an Ace plus 2 to 9, or always a pair. The dealer and every later card come from the normal shoe. Share links add `&m=soft` or `&m=split`.
 - **Daily** gives everyone the same shoe for the day (seeded from the UTC date, computed on the phone), with £500 of play chips, a £10 minimum and £250 table maximum. Share your chip total at the end; your first finish of the day is your score. Link: `…/?daily`.
 - **Ten Ten Bust**: when the dealer busts and their last two cards are both tens or picture cards, the game makes a big deal of it.
 
@@ -25,4 +26,4 @@ A retro pixel blackjack trainer for iPhone that lets you play the whole game. Ev
 - `tests/engine.test.js`: run `node tests/engine.test.js` (checks the full strategy chart, seeding and settlement).
 
 ## Hosting
-GitHub Pages from `main`, root folder. Bump `CACHE` in `sw.js` and `VERSION` in `app.js` when releasing so installed copies pick up the update.
+GitHub Pages from `main`, root folder. Bump `CACHE` in `sw.js`, `VERSION` in `app.js` and the `?v=` on the script tags in `index.html` when releasing so installed copies pick up the update.
