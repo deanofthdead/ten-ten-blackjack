@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.9.0';
+const VERSION = '2.0.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -272,6 +272,7 @@ function dailyLabel(key) { const d = new Date(key + 'T12:00:00Z'); return d.toLo
 function startSession(mode, seed, resume) {
   gen++; waiter = null;
   closeMenu();
+  banner.intro(); // fresh shoe: the title glides on
   if (resume) {
     S = resume; S.shoe = TT.Shoe.at(S.seed, S.pos);
   } else {
@@ -304,7 +305,7 @@ async function runSession() {
     render();
     const over = S.handNo >= SESSION_HANDS || (isDaily() && S.chips < TABLE_MIN);
     await waitFor([{ id: 'next', label: over ? 'SEE RESULTS' : 'NEXT HAND', cls: 'dark' }]);
-    if (!over && S.lastLost) hype('BRICK BY BRICK'); // only after a defeat
+    if (!over && S.lastLost) hype('BRICK BY BRICK', true, { replace: true, hold: 1200 }); // only after a defeat
   }
   finishSession();
 }
@@ -498,7 +499,19 @@ function settleAll() {
   save();
   render();
   S.lastLost = units < 0;
-  if (units > 0) sfx.win(); else if (units < 0) { sfx.lose(); hype("DON'T WORRY,\nWE'RE BUILDING IT UP", true); } else sfx.push();
+  const dealerBust = TT.total(R.dealer).t > 21;
+  if (units > 0) {
+    sfx.win();
+    banner.show(dealerBust ? 'DEALER BUST' : anyBJ && R.hands.length === 1 ? 'BLACKJACK!' : 'WIN', { cls: dealerBust ? 'b-bust' : 'b-win', hold: 1300, replace: true });
+  } else if (units < 0) {
+    sfx.lose();
+    banner.show('LOSE', { cls: 'b-lose', hold: 900, replace: true });
+    banner.show("DON'T WORRY,", { hold: 1000 });
+    banner.show("WE'RE BUILDING IT UP", { hold: 1500 });
+  } else {
+    sfx.push();
+    banner.show('PUSH', { cls: 'b-push', hold: 1200, replace: true });
+  }
 }
 
 async function tenTenBust() {
@@ -539,11 +552,80 @@ function confetti() {
   return () => { on = false; x.clearRect(0, 0, W, H); };
 }
 
-let hypeT = null;
-function hype(msg, quiet) {
-  const h = $('#hype'); h.textContent = msg;
-  h.classList.remove('show'); void h.offsetWidth; h.classList.add('show');
-  clearTimeout(hypeT); hypeT = setTimeout(() => h.classList.remove('show'), 2200);
+// ---------- Felt banner ----------
+// The felt's arched title doubles as a message banner. Text glides along the same arc as the
+// dashed line: it fades in from the left, rests in the middle, and glides off to the right.
+// "TEN TEN BLACKJACK" steps aside for messages and comes back when they're done.
+const banner = (() => {
+  const path = document.getElementById('arc');
+  const tp = document.getElementById('bannerPath'), txt = document.getElementById('bannerText');
+  const svg = txt.ownerSVGElement;
+  // Extend the arc's own curve past both ends so text can travel in and out along it.
+  const pts = [];
+  for (let i = 0; i <= 80; i++) {
+    const t = -0.4 + 1.8 * i / 80;
+    pts.push((20 + 360 * t).toFixed(1) + ' ' + (62 * (1 - t) * (1 - t) - 20 * (1 - t) * t + 62 * t * t).toFixed(1));
+  }
+  path.setAttribute('d', 'M ' + pts.join(' L '));
+  const L = path.getTotalLength(), MID = L / 2, TRAVEL = L / 2 - 24;
+  const TITLE = { text: 'TEN TEN BLACKJACK', cls: '', size: 16, hold: 0 };
+  let showing = null, queue = [], running = false, interrupt = false;
+  const easeOut = p => 1 - Math.pow(1 - p, 3), easeIn = p => p * p * p;
+  function tween(dur, ease, fn) {
+    return new Promise(res => {
+      const t0 = performance.now(); let done = false;
+      const finish = () => { if (!done) { done = true; fn(1); res(); } };
+      const step = now => { if (done) return; const p = Math.min(1, (now - t0) / dur); if (p < 1) { fn(ease(p)); requestAnimationFrame(step); } else finish(); };
+      requestAnimationFrame(step);
+      setTimeout(finish, dur + 400); // never hang if frames stop (hidden tab)
+    });
+  }
+  const wait = ms => new Promise(r => setTimeout(r, ms));
+  function place(offset, op) { tp.setAttribute('startOffset', offset.toFixed(1)); txt.setAttribute('opacity', op.toFixed(3)); }
+  async function enter(it) {
+    tp.textContent = it.text; svg.setAttribute('aria-label', it.text);
+    txt.setAttribute('class', 't1' + (it.cls ? ' ' + it.cls : ''));
+    txt.style.fontSize = (it.size || Math.min(18, Math.floor(330 / it.text.length))) + 'px';
+    await tween(it === TITLE ? 750 : 520, easeOut, p => place(MID - TRAVEL * (1 - p), p));
+    showing = it;
+  }
+  async function exit() {
+    await tween(380, easeIn, p => place(MID + TRAVEL * p, 1 - p));
+    showing = null;
+  }
+  async function pump() {
+    if (running) return; running = true;
+    for (;;) {
+      if (queue.length) {
+        const it = queue.shift();
+        if (showing) await exit();
+        await enter(it);
+        it.until = performance.now() + it.hold;
+        while (performance.now() < it.until && !interrupt) await wait(40);
+        interrupt = false;
+        continue;
+      }
+      if (showing !== TITLE) { if (showing) await exit(); if (!queue.length) await enter(TITLE); continue; }
+      break;
+    }
+    running = false;
+  }
+  return {
+    // opts: cls (colour), hold (ms on screen), replace (drop anything queued and cut in now)
+    show(text, opts) {
+      opts = opts || {};
+      const hold = opts.hold || 1300;
+      if (showing && showing.text === text && showing !== TITLE && !queue.length) { showing.until = Math.max(showing.until || 0, performance.now() + hold); return; }
+      if (opts.replace) { queue.length = 0; if (showing && showing !== TITLE) interrupt = true; }
+      queue.push({ text, cls: opts.cls || '', hold });
+      pump();
+    },
+    // Bring the title on afresh (start of a shoe).
+    intro() { queue.length = 0; queue.push(TITLE); interrupt = true; pump(); },
+  };
+})();
+function hype(msg, quiet, opts) {
+  banner.show(msg, Object.assign({ hold: 1500 }, opts));
   if (!quiet) { tone(784, 0.08, 'square', 0.04); tone(1046, 0.12, 'square', 0.04, 0.08); }
 }
 let toastT = null;
@@ -781,7 +863,8 @@ $('#menuBtn').onclick = () => { sfx.click(); openMenu(); };
   if (q.toString()) history.replaceState(null, '', location.pathname);
   R = { dealer: [], hands: [], active: -1, hole: true };
   S = null;
-  if (sharedSeed) { openMenu(); askSeed(sharedSeed, q.get('m')); return; }
+  if (sharedSeed) { banner.intro(); openMenu(); askSeed(sharedSeed, q.get('m')); return; }
+  banner.intro();
   openMenu(wantDaily ? 'TODAY\'S DAILY IS WAITING' : '');
 })();
 
