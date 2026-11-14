@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -145,12 +145,23 @@ function chipSrc(v) {
   return (chipCache[v] = c.toDataURL());
 }
 const SUIT_NAME = { S: 'spades', H: 'hearts', D: 'diamonds', C: 'clubs' };
+const cardEls = new WeakMap();
 function cardEl(card, down) {
-  const im = new Image();
-  im.src = down ? backSrc() : cardSrc(card);
-  im.alt = down ? 'face-down card' : card.r + ' of ' + SUIT_NAME[card.s];
-  im.className = 'card' + (card.fresh ? ' deal' : '') + (card.flip && !down ? ' flip' : '');
-  im.draggable = false;
+  let im = cardEls.get(card);
+  const src = down ? backSrc() : cardSrc(card);
+  if (!im) {
+    im = new Image();
+    im.draggable = false;
+    im.className = 'card' + (card.fresh ? ' deal' : '');
+    im.addEventListener('animationend', () => im.classList.remove('deal', 'flip'));
+    if (card.fresh) setTimeout(() => im.classList.remove('deal'), 600); // in case animationend never fires
+    cardEls.set(card, im);
+  }
+  if (im._src !== src) {
+    if (im._src && !down) { im.classList.remove('flip'); void im.offsetWidth; im.classList.add('flip'); }
+    im.src = src; im._src = src;
+    im.alt = down ? 'face-down card' : card.r + ' of ' + SUIT_NAME[card.s];
+  }
   return im;
 }
 
@@ -535,50 +546,66 @@ function render() {
   renderHud();
   if (!R) return;
   const k = baseK();
-  const dz = $('#dealerCards'); dz.innerHTML = ''; dz.style.setProperty('--k', k);
-  R.dealer.forEach((c, i) => dz.appendChild(cardEl(c, i === 1 && R.hole)));
+  const dz = $('#dealerCards'); dz.style.setProperty('--k', k);
+  syncCards(dz, R.dealer.map((c, i) => cardEl(c, i === 1 && R.hole)));
   let dl = 'DEALER';
   if (R.dealer.length) dl += ' <b>' + (R.hole ? TT.total([R.dealer[0]]).t : totalText(R.dealer)) + '</b>';
-  $('#dealerLabel').innerHTML = dl;
+  setHTML($('#dealerLabel'), dl);
 
-  const hz = $('#hands'); hz.innerHTML = '';
+  const hz = $('#hands');
   const n = Math.max(1, R.hands.length);
   const avail = Math.min(innerWidth, 520) - 16;
-  let hk = n === 1 ? k : Math.max(1.5, Math.min(k - 1, Math.floor((avail / n) / 40 * 2) / 2));
+  const hk = n === 1 ? k : Math.max(1.5, Math.min(k - 1, Math.floor((avail / n) / 40 * 2) / 2));
   hz.style.setProperty('--k', hk);
+  let boxes;
   if (!R.hands.length) {
-    const box = document.createElement('div'); box.className = 'box';
-    box.innerHTML = '<div class="empty">' + (isDaily() ? 'PLACE<br><br>YOUR BET' : '') + '</div>';
-    if (isDaily() && R.pendingBet) box.innerHTML = '<div class="empty"></div><div class="bet"><img src="' + chipSrc(R.pendingBet >= 100 ? 100 : R.pendingBet >= 50 ? 50 : 10) + '" alt="">' + money(R.pendingBet) + '</div>';
-    hz.appendChild(box);
+    if (!placeholder) { placeholder = document.createElement('div'); placeholder.className = 'box'; }
+    setHTML(placeholder, isDaily() && R.pendingBet
+      ? '<div class="empty"></div><div class="bet"><img src="' + chipSrc(R.pendingBet >= 100 ? 100 : R.pendingBet >= 50 ? 50 : 10) + '" alt="">' + money(R.pendingBet) + '</div>'
+      : '<div class="empty">' + (isDaily() ? 'PLACE<br><br>YOUR BET' : '') + '</div>');
+    boxes = [placeholder];
+  } else {
+    boxes = R.hands.map((h, i) => boxFor(h, i));
   }
-  R.hands.forEach((h, i) => {
-    const box = document.createElement('div');
-    box.className = 'box' + (i === R.active ? ' active' : '');
-    const cards = document.createElement('div'); cards.className = 'cards';
-    h.cards.forEach(c => cards.appendChild(cardEl(c)));
-    box.appendChild(cards);
-    const lab = document.createElement('div'); lab.className = 'label';
-    const tt = h.split && TT.isBlackjack(h.cards) ? '21' : totalText(h.cards);
-    lab.innerHTML = h.cards.length ? '<b>' + tt + '</b>' + (h.doubled ? ' x2' : '') : '&nbsp;';
-    box.appendChild(lab);
-    if (isDaily()) {
-      const bt = document.createElement('div'); bt.className = 'bet';
-      bt.innerHTML = '<img src="' + chipSrc(h.bet >= 100 ? 100 : h.bet >= 50 ? 50 : 10) + '" alt="">' + money(h.bet);
-      box.appendChild(bt);
-    }
-    if (h.res || h.bust) {
-      const r = document.createElement('div');
-      const res = h.res || 'bust';
-      r.className = 'res ' + res;
-      r.textContent = { win: 'WIN', lose: h.bust ? 'BUST' : 'LOSE', push: 'PUSH', bj: 'BLACKJACK!', bust: 'BUST' }[res];
-      box.appendChild(r);
-    }
-    hz.appendChild(box);
-  });
+  syncCards(hz, boxes);
   // clear one-shot animation flags
   R.dealer.forEach(c => { c.fresh = false; c.flip = false; });
   R.hands.forEach(h => h.cards.forEach(c => { c.fresh = false; }));
+}
+// Keep existing elements attached (so running animations aren't restarted) and only add/move what changed.
+function syncCards(parent, els) {
+  els.forEach((el, i) => { if (parent.children[i] !== el) parent.insertBefore(el, parent.children[i] || null); });
+  while (parent.children.length > els.length) parent.lastChild.remove();
+}
+function setHTML(el, html) { if (el._html !== html) { el.innerHTML = html; el._html = html; } }
+let placeholder = null;
+const boxEls = new WeakMap();
+function boxFor(h, i) {
+  let b = boxEls.get(h);
+  if (!b) {
+    b = { el: document.createElement('div'), cards: document.createElement('div'), lab: document.createElement('div'), bet: document.createElement('div'), res: null };
+    b.cards.className = 'cards'; b.lab.className = 'label'; b.bet.className = 'bet';
+    b.el.append(b.cards, b.lab);
+    boxEls.set(h, b);
+  }
+  const active = i === R.active;
+  if (active && !b.el.classList.contains('active')) b.el.style.animationDelay = -((performance.now() % 2200) / 1000) + 's';
+  b.el.className = 'box' + (active ? ' active' : '');
+  syncCards(b.cards, h.cards.map(c => cardEl(c)));
+  const tt = h.split && TT.isBlackjack(h.cards) ? '21' : totalText(h.cards);
+  setHTML(b.lab, h.cards.length ? '<b>' + tt + '</b>' + (h.doubled ? ' x2' : '') : '&nbsp;');
+  if (isDaily()) {
+    setHTML(b.bet, '<img src="' + chipSrc(h.bet >= 100 ? 100 : h.bet >= 50 ? 50 : 10) + '" alt="">' + money(h.bet));
+    if (b.bet.parentNode !== b.el) b.el.insertBefore(b.bet, b.res);
+  }
+  if ((h.res || h.bust) && !b.res) {
+    b.res = document.createElement('div');
+    const res = h.res || 'bust';
+    b.res.className = 'res ' + res;
+    b.res.textContent = { win: 'WIN', lose: h.bust ? 'BUST' : 'LOSE', push: 'PUSH', bj: 'BLACKJACK!', bust: 'BUST' }[res];
+    b.el.appendChild(b.res);
+  }
+  return b.el;
 }
 addEventListener('resize', () => render());
 
