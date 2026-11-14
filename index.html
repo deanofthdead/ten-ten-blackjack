@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<meta name="theme-color" content="#0e3d1d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ten Ten">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="A blackjack trainer that lets you play the whole game. Learn the book, keep your streaks, chase a Ten Ten Bust. Play chips only.">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<title>Ten Ten Blackjack</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+:root{
+  --felt:#1c7a3b;--felt2:#186a33;--feltdk:#0e3d1d;--yl:#ffd23a;--yl2:#c99a12;--ink:#0b0b0b;
+  --wh:#f6f1de;--rd:#e2402f;--gr:#4fc35a;--bl:#4f86ff;--k:3;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--feltdk);overflow:hidden;color:var(--wh);
+  font-family:'Press Start 2P',ui-monospace,Menlo,monospace;user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation}
+button{font-family:inherit}
+img{image-rendering:pixelated;image-rendering:crisp-edges}
+#app{position:fixed;inset:0;display:flex;flex-direction:column;
+  padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background:#4a2a14}
+/* HUD */
+#hud{display:flex;flex-direction:column;gap:6px;padding:8px 10px 6px;background:#2b170a;border-bottom:4px solid #000;font-size:9px;line-height:1.3}
+#hud .row{display:flex;justify-content:space-between;align-items:center;gap:6px}
+#hud .pill{background:#000;border:2px solid #5a3a1e;padding:4px 6px;white-space:nowrap}
+#hud .pill b{color:var(--yl);font-weight:normal}
+#hud .pill.hot b{color:#ff9a3c}
+#hud .pill.bk b{color:var(--gr)}
+#menuBtn{background:#000;color:var(--yl);border:2px solid var(--yl);font-size:10px;padding:5px 7px}
+#chipsPill{display:none}
+.daily #chipsPill{display:block}.daily #seedPill{display:none}
+#seedPill{color:#c8b48a}
+/* Table */
+#table{position:relative;flex:1;min-height:0;display:flex;flex-direction:column;justify-content:space-between;align-items:center;
+  padding:10px 8px 8px;overflow:hidden;
+  background-color:var(--felt);
+  background-image:repeating-conic-gradient(var(--felt2) 0 25%,transparent 0 50%);background-size:4px 4px;
+  border-left:6px solid #000;border-right:6px solid #000;
+  box-shadow:inset 0 0 0 6px #156230,inset 0 0 0 10px #0f4f26}
+.zone{display:flex;flex-direction:column;align-items:center;gap:6px;width:100%}
+.label{font-size:9px;background:#0009;padding:4px 6px;border:2px solid #0006;min-height:21px;white-space:nowrap}
+.label b{color:var(--yl);font-weight:normal}
+.cards{display:flex;justify-content:center;min-height:calc(35px * var(--k))}
+.card{width:calc(25px * var(--k));height:calc(35px * var(--k));display:block;filter:drop-shadow(calc(1px * var(--k)) calc(1px * var(--k)) 0 #0007)}
+.card+.card{margin-left:calc(-11px * var(--k))}
+.card.deal{animation:dealin .28s steps(6) both}
+.card.flip{animation:flip .3s steps(4) both}
+@keyframes dealin{from{transform:translate(45vw,-40vh) rotate(-20deg);opacity:.6}to{transform:none;opacity:1}}
+@keyframes flip{0%{transform:scaleX(1)}50%{transform:scaleX(0)}100%{transform:scaleX(1)}}
+/* Felt print */
+#print{text-align:center;color:var(--yl);pointer-events:none;display:flex;flex-direction:column;align-items:center;gap:7px}
+#print svg{display:block;width:min(92vw,420px);height:auto;overflow:visible}
+#print .t1{font-size:16px;fill:var(--yl);letter-spacing:1px}
+#print .sub{font-size:7px;line-height:1.6;opacity:.95}
+#print .ins{font-size:7px;border:3px solid var(--yl);padding:5px 10px}
+/* Player hands */
+#hands{display:flex;justify-content:center;gap:6px;width:100%;flex-wrap:nowrap}
+.box{position:relative;border:3px solid var(--yl);padding:calc(4px * var(--k)) calc(3px * var(--k)) 6px;display:flex;flex-direction:column;align-items:center;gap:6px;
+  min-width:calc(48px * var(--k));min-height:calc(54px * var(--k));background:#0001}
+.box.active{border-color:#fff;box-shadow:0 0 0 3px #000,0 0 0 6px var(--yl);animation:blink .8s steps(2) infinite}
+@keyframes blink{50%{box-shadow:0 0 0 3px #000,0 0 0 6px #fff}}
+.box .res{position:absolute;left:50%;top:38%;transform:translate(-50%,-50%) rotate(-8deg);font-size:12px;padding:6px 7px;border:3px solid #000;white-space:nowrap;z-index:2;box-shadow:3px 3px 0 #000}
+.res.win,.res.bj{background:var(--gr);color:#000}.res.lose,.res.bust{background:var(--rd);color:#fff}.res.push{background:#ddd;color:#000}
+.res.bj{background:var(--yl)}
+.box .bet{display:flex;align-items:center;gap:4px;font-size:8px;color:var(--yl)}
+.box .bet img{width:24px;height:24px}
+.box .empty{font-size:8px;color:var(--yl);opacity:.7;margin:auto}
+/* Controls */
+#controls{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;padding:8px;background:#2b170a;border-top:4px solid #000;min-height:72px}
+#controls.c2{grid-template-columns:repeat(2,1fr)}#controls.c1{grid-template-columns:1fr}#controls.c3{grid-template-columns:repeat(3,1fr)}#controls.c5{grid-template-columns:repeat(5,1fr)}
+.btn{font-size:11px;padding:16px 4px;border:3px solid #000;color:#000;background:var(--yl);
+  box-shadow:inset -3px -3px 0 #0005,inset 3px 3px 0 #fff7;cursor:pointer;line-height:1.2}
+.btn:active{box-shadow:inset 3px 3px 0 #0005}
+.btn:disabled{background:#5a5a5a!important;color:#2a2a2a!important;box-shadow:none;opacity:.7}
+.btn.hit{background:var(--rd);color:#fff}.btn.stand{background:var(--yl)}.btn.dbl{background:var(--gr)}.btn.split{background:var(--bl);color:#fff}
+.btn.dark{background:#111;color:var(--yl);border-color:var(--yl)}
+.btn.chip{background:#111;color:#fff;padding:6px 2px;display:flex;flex-direction:column;align-items:center;gap:3px;font-size:8px}
+.btn.chip img{width:32px;height:32px}
+.btn small{display:block;font-size:7px;margin-top:5px;opacity:.85}
+/* Toast */
+#toast{position:absolute;left:50%;top:44%;transform:translate(-50%,-50%);font-size:12px;padding:8px 10px;border:3px solid #000;background:#000;color:var(--yl);display:none;z-index:5;white-space:nowrap;box-shadow:4px 4px 0 #0008}
+#toast.ok{color:var(--gr)}#toast.bad{color:#ff7a6a}
+#toast.show{display:block;animation:pop .2s steps(3)}
+@keyframes pop{from{transform:translate(-50%,-50%) scale(.4)}}
+/* Modals */
+.ov{position:fixed;inset:0;background:#000b;display:none;align-items:center;justify-content:center;z-index:20;padding:calc(12px + env(safe-area-inset-top)) 12px calc(12px + env(safe-area-inset-bottom))}
+.ov.on{display:flex}
+.panel{background:#151515;border:4px solid var(--yl);box-shadow:6px 6px 0 #000;max-width:440px;width:100%;max-height:100%;overflow:auto;padding:16px 14px;font-size:10px;line-height:1.7;-webkit-overflow-scrolling:touch}
+.panel h2{font-size:13px;color:var(--yl);margin:0 0 12px;line-height:1.5;font-weight:normal}
+.panel h3{font-size:10px;color:var(--yl);margin:14px 0 6px;font-weight:normal}
+.panel p{margin:0 0 10px;font-size:9px;line-height:1.8;color:#eee}
+.panel .btns{display:flex;flex-direction:column;gap:8px;margin-top:14px}
+.panel .btns .btn{font-size:10px;padding:13px 6px}
+.panel .say{font-size:12px;color:var(--gr);margin:0 0 8px}
+.panel .you{font-size:9px;color:#ff9a8a;margin:0 0 10px}
+.panel .why{background:#000;border:2px solid #444;padding:10px;font-size:9px;line-height:1.9}
+.panel input{width:100%;font:inherit;font-size:16px;padding:10px;background:#000;color:var(--yl);border:3px solid var(--yl);text-transform:uppercase;letter-spacing:2px;border-radius:0}
+.stat{display:flex;justify-content:space-between;font-size:9px;padding:4px 0;border-bottom:2px dotted #333}
+.stat b{color:var(--yl);font-weight:normal}
+.big{font-size:22px;color:var(--yl);text-align:center;margin:8px 0 12px}
+.fine{font-size:7px!important;color:#aaa!important;line-height:1.8!important}
+/* Menu */
+#menu .panel{background:var(--felt);background-image:repeating-conic-gradient(var(--felt2) 0 25%,transparent 0 50%);background-size:4px 4px;border-color:var(--yl)}
+.logo{text-align:center;color:var(--yl);font-size:24px;line-height:1.35;margin:6px 0 4px;text-shadow:3px 3px 0 #000,-1px -1px 0 #000}
+.logo small{display:block;font-size:13px;margin-top:4px}
+.tag{text-align:center;font-size:8px;line-height:1.8;margin:8px 0 6px;color:#fff}
+.lifetime{font-size:7px;text-align:center;line-height:1.9;color:#e8f5e0;margin-top:10px}
+.soundRow{display:flex;justify-content:center;margin-top:8px}
+/* Chart */
+table.chart{border-collapse:collapse;width:100%;font-size:7px;margin-bottom:8px}
+.chart th,.chart td{border:1px solid #000;text-align:center;padding:4px 0}
+.chart th{background:#222;color:var(--yl);font-weight:normal}
+.chart td.H{background:#e2402f;color:#fff}.chart td.S{background:#ffd23a;color:#000}.chart td.D{background:#4fc35a;color:#000}
+.chart td.Ds{background:#8ee08e;color:#000}.chart td.P{background:#4f86ff;color:#fff}
+.legend{display:flex;flex-wrap:wrap;gap:6px;font-size:7px;margin:4px 0 8px}.legend span{padding:3px 5px;border:1px solid #000}
+/* Ten Ten Bust */
+#tenten{position:fixed;inset:0;z-index:30;display:none;align-items:center;justify-content:center;flex-direction:column;gap:10px;overflow:hidden;
+  background:linear-gradient(45deg,#ffd23a 25%,#e2402f 25% 50%,#ffd23a 50% 75%,#e2402f 75%);background-size:64px 64px;animation:stripes .4s steps(4) infinite}
+#tenten.on{display:flex}
+@keyframes stripes{to{background-position:64px 0}}
+#tenten canvas{position:absolute;inset:0;width:100%;height:100%;image-rendering:pixelated;pointer-events:none}
+#tenten .w{position:relative;font-size:min(16vw,96px);color:#fff;text-shadow:6px 6px 0 #000,-3px -3px 0 #000,3px -3px 0 #000,-3px 3px 0 #000;line-height:1}
+#tenten .w.b{color:var(--yl);font-size:min(14vw,84px)}
+#tenten .w{opacity:0}
+#tenten.on .w1{animation:slam .35s steps(4) .05s both}
+#tenten.on .w2{animation:slam .35s steps(4) .55s both}
+#tenten.on .w3{animation:slam .45s steps(5) 1.05s both,shake .25s steps(3) 1.5s 6}
+#tenten .tc{position:relative;display:flex;gap:10px;--k:5;opacity:0}
+#tenten.on .tc{animation:slam .3s steps(3) 1.6s both}
+#tenten .tc .card+.card{margin-left:0}
+#tenten .note{position:relative;font-size:10px;background:#000;color:var(--yl);padding:8px 10px;border:3px solid #fff;opacity:0}
+#tenten.on .note{animation:slam .2s steps(2) 2.2s both}
+@keyframes slam{0%{opacity:0;transform:scale(4)}100%{opacity:1;transform:scale(1)}}
+@keyframes shake{0%{transform:translate(-8px,4px)}33%{transform:translate(8px,-4px)}66%{transform:translate(-4px,-6px)}100%{transform:none}}
+body.shake #app{animation:shake .2s steps(3) 4}
+@media (min-height:760px){:root{--k:3}.btn{padding:18px 4px}}
+@media (max-width:350px){.btn{font-size:9px}#hud{font-size:8px}}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="hud">
+    <div class="row">
+      <div class="pill">HAND <b id="handNo">-</b></div>
+      <div class="pill" id="chipsPill">CHIPS <b id="chips">£500</b></div>
+      <div class="pill" id="seedPill">SEED <span id="seed">-</span></div>
+      <button id="menuBtn" aria-label="Menu">MENU</button>
+    </div>
+    <div class="row">
+      <div class="pill hot">WIN STREAK <b id="winStreak">0</b></div>
+      <div class="pill bk">BOOK STREAK <b id="bookStreak">0</b></div>
+    </div>
+  </div>
+  <div id="table">
+    <div class="zone" id="dealerZone">
+      <div class="label" id="dealerLabel">DEALER</div>
+      <div class="cards" id="dealerCards"></div>
+    </div>
+    <div id="print">
+      <svg viewBox="0 0 400 70" aria-label="Ten Ten Blackjack">
+        <defs><path id="arc" d="M 20 62 Q 200 -10 380 62"/></defs>
+        <path d="M 8 66 Q 200 -8 392 66" fill="none" stroke="#ffd23a" stroke-width="3" stroke-dasharray="6 4"/>
+        <text class="t1"><textPath href="#arc" startOffset="50%" text-anchor="middle">TEN TEN BLACKJACK</textPath></text>
+      </svg>
+      <div class="sub">BLACKJACK PAYS 3 TO 2<br>DEALER STANDS ON ALL 17s</div>
+      <div class="ins">INSURANCE PAYS 2 TO 1</div>
+    </div>
+    <div class="zone" id="playerZone">
+      <div id="hands"></div>
+    </div>
+    <div id="toast"></div>
+  </div>
+  <div id="controls"></div>
+</div>
+
+<div class="ov" id="modal"><div class="panel" id="modalBody"></div></div>
+<div class="ov" id="menu"><div class="panel" id="menuBody"></div></div>
+<div id="tenten" role="dialog" aria-label="Ten Ten Bust">
+  <canvas id="confetti"></canvas>
+  <div class="w w1">TEN</div>
+  <div class="w w2">TEN</div>
+  <div class="w w3 b">BUST!</div>
+  <div class="tc" id="ttCards"></div>
+  <div class="note" id="ttNote">TAP TO CONTINUE</div>
+</div>
+
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
