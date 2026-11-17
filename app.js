@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '2.7.0';
+const VERSION = '3.0.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -264,8 +264,9 @@ function modal(html, buttons) {
 // ---------- Session state ----------
 let S = null;   // the session
 let R = null;   // the current round
-function newStats() { return { won: 0, lost: 0, push: 0, bj: 0, dec: 0, ok: 0, winStreak: 0, bestWin: 0, bookStreak: 0, bestBook: 0, tenten: 0, eggs: 0, mistakes: [] }; }
+function newStats() { return { won: 0, lost: 0, push: 0, bj: 0, dec: 0, ok: 0, winStreak: 0, bestWin: 0, bookStreak: 0, bestBook: 0, tenten: 0, eggs: 0, countOk: 0, countChecks: 0, countStreak: 0, bestCount: 0, mistakes: [] }; }
 // Chips are in play (play money only) in the Daily and in Chip Practice.
+function isShhh() { return S && S.mode === 'shhh'; }
 function isDaily() { return S && (S.mode === 'daily' || S.mode === 'chips'); }
 function money(n) { return '£' + (Math.round(n * 100) / 100).toLocaleString('en-GB'); }
 function dailyLabel(key) { const d = new Date(key + 'T12:00:00Z'); return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).toUpperCase(); }
@@ -281,21 +282,30 @@ function startSession(mode, seed, resume) {
     S = { mode, seed: mode === 'daily' ? TT.dailySeed(key) : seed, dailyKey: mode === 'daily' ? key : null,
       handNo: 0, chips: DAILY_START, lastBet: 50, stats: newStats() };
     S.shoe = new TT.Shoe(S.seed);
+    if (mode === 'shhh') { S.shoe.draw(); S.count = 0; } // burn the first card face down, like a casino
   }
   R = { dealer: [], hands: [], active: -1, hole: true };
   document.body.classList.toggle('daily', isDaily());
+  document.body.classList.toggle('shhh', isShhh());
   render();
   runSession().catch(e => { if (e !== ABORT) console.error(e); });
 }
 function persist() {
   if (!S) return;
-  P.cur = { mode: S.mode, seed: S.seed, dailyKey: S.dailyKey, handNo: S.handNo, pos: S.shoe.pos, chips: S.chips, lastBet: S.lastBet, stats: S.stats };
+  P.cur = { mode: S.mode, seed: S.seed, dailyKey: S.dailyKey, handNo: S.handNo, pos: S.shoe.pos, chips: S.chips, lastBet: S.lastBet, stats: S.stats, count: S.count, lastSeen: S.lastSeen };
   save();
 }
 
+function sessionOver() {
+  if (isShhh()) return S.shoe.pos >= TT.CUT_CARD; // the cut card has come out: last hand of the shoe
+  return S.handNo >= SESSION_HANDS || (isDaily() && S.chips < TABLE_MIN);
+}
 async function runSession() {
-  while (S.handNo < SESSION_HANDS) {
-    if (isDaily() && S.chips < TABLE_MIN) break;
+  while (!sessionOver()) {
+    if (isShhh() && S.handNo > 0) {
+      R = { dealer: [], hands: [], active: -1, hole: true }; render(); // cards cleared: count from memory, like the real thing
+      await countCheck();
+    }
     persist();
     S.roundDone = false;
     await playRound();
@@ -304,16 +314,18 @@ async function runSession() {
     P.life.hands++;
     persist();
     render();
-    const over = S.handNo >= SESSION_HANDS || (isDaily() && S.chips < TABLE_MIN);
+    const over = sessionOver();
     await waitFor([{ id: 'next', label: over ? 'SEE RESULTS' : 'NEXT HAND', cls: 'dark' }]);
     if (!over && S.lastLost) hype('BRICK BY BRICK', true, { replace: true, hold: 1200 }); // only after a defeat
   }
+  if (isShhh() && S.handNo > 0) { R = { dealer: [], hands: [], active: -1, hole: true }; render(); await countCheck(true); }
   finishSession();
 }
 
 function deal(arr, down) { return dealCard(arr, S.shoe.draw(), down); }
 function dealCard(arr, c, down) {
   c.fresh = true; arr.push(c);
+  if (!down) seen(c);
   sfx.deal(); render();
   return sleep(down ? 260 : 300);
 }
@@ -351,7 +363,13 @@ async function playRound() {
   R.hands = [h];
   render();
   const fixed = TT.practiceCards(S.seed, S.mode, S.handNo); // soft / split practice
-  if (fixed) {
+  if (isShhh()) {
+    // Three seats: DOT (first base), you, SAL (third base). Round-robin, dealer last, hole card face down.
+    R.npcs = NPC_NAMES.map(name => ({ name, cards: [], npc: true }));
+    const [left, right] = R.npcs;
+    render();
+    for (let r = 0; r < 2; r++) { await deal(left.cards); await deal(h.cards); await deal(right.cards); await deal(R.dealer, r === 1); }
+  } else if (fixed) {
     await dealCard(h.cards, fixed[0]); await deal(R.dealer); await dealCard(h.cards, fixed[1]); await deal(R.dealer, true);
   } else {
     await deal(h.cards); await deal(R.dealer); await deal(h.cards); await deal(R.dealer, true);
@@ -380,6 +398,7 @@ async function playRound() {
     if (TT.isBlackjack(R.dealer)) {
       reveal(); await sleep(400);
       if (R.ins) S.chips += R.ins * 3;
+      (R.npcs || []).forEach(n => { n.res = TT.settle(n, R.dealer); });
       toast('DEALER BLACKJACK', 'bad');
       await sleep(700);
       settleAll();
@@ -388,12 +407,16 @@ async function playRound() {
     if (up.r === 'A') { toast('NO DEALER BLACKJACK'); await sleep(700); }
   }
 
-  if (TT.isBlackjack(h.cards)) { reveal(); await sleep(400); settleAll(); return; }
+  const pbj = TT.isBlackjack(h.cards);
+  if (pbj && !R.npcs) { reveal(); await sleep(400); settleAll(); return; }
 
-  for (let i = 0; i < R.hands.length; i++) { R.active = i; render(); await playHand(i); }
+  if (R.npcs) await npcPlay(R.npcs[0]);            // first base acts first
+  if (!pbj) for (let i = 0; i < R.hands.length; i++) { R.active = i; render(); await playHand(i); }
   R.active = -1;
+  if (R.npcs) await npcPlay(R.npcs[1]);            // third base acts last
 
-  const live = R.hands.some(x => TT.total(x.cards).t <= 21);
+  const liveHand = x => TT.total(x.cards).t <= 21 && !(TT.isBlackjack(x.cards) && !x.split);
+  const live = R.hands.some(liveHand) || (R.npcs || []).some(liveHand);
   // Your decisions are done: if the dealer shows a bust card, call for a ten (stays up until the result).
   if (live && TT.val(R.dealer[0].r) <= 6) { hype(TEN_ASK, false, { sticky: true }); R.tenAsk = true; await sleep(700); }
   reveal();
@@ -430,7 +453,65 @@ async function playRound() {
   settleAll();
 }
 
-function reveal() { if (R.hole) { R.hole = false; if (R.dealer[1]) R.dealer[1].flip = true; sfx.deal(); render(); } }
+function reveal() { if (R.hole) { R.hole = false; if (R.dealer[1]) { R.dealer[1].flip = true; seen(R.dealer[1]); } sfx.deal(); render(); } }
+// Every card that turns face up goes into the running count (Shhhhh mode keeps score of it).
+function seen(c) {
+  if (!isShhh()) return;
+  S.count = (S.count || 0) + TT.hiLo(c);
+  (R.seen = R.seen || []).push(c);
+}
+
+// ---------- Shhhhh: count check ----------
+function signed(n) { return (n > 0 ? '+' : '') + n; }
+async function countCheck(final) {
+  const st = S.stats;
+  let guess = 0;
+  const p = modal('<h2>SHHHHH… ' + (final ? 'FINAL COUNT' : 'WHAT\'S THE COUNT?') + '</h2>' +
+    '<p>Running count since the shuffle (Hi-Lo).<br>2-6 = +1 · 7-9 = 0 · 10-A = -1</p>' +
+    '<div class="stepper"><button class="btn dark" data-d="-5">-5</button><button class="btn dark" data-d="-1">-1</button>' +
+    '<div class="cv" id="cv">0</div><button class="btn dark" data-d="1">+1</button><button class="btn dark" data-d="5">+5</button></div>',
+    [{ id: 'check', label: 'THAT\'S MY COUNT', cls: 'stand' }]);
+  const cv = $('#cv');
+  $('#modalBody').querySelectorAll('[data-d]').forEach(b => b.onclick = () => { sfx.click(); guess += +b.dataset.d; cv.textContent = signed(guess); });
+  await p;
+  const right = guess === S.count;
+  st.countChecks++;
+  if (right) {
+    st.countOk++; st.countStreak++; st.bestCount = Math.max(st.bestCount, st.countStreak);
+    P.best.count = Math.max(P.best.count || 0, st.countStreak);
+    sfx.ok(); toast('COUNT ✓ ' + signed(S.count), 'ok');
+  } else {
+    st.countStreak = 0; sfx.bad();
+    const tc = TT.trueCount(S.count, S.shoe.pos);
+    const last = (S.lastSeen || []).map(c => esc(c.r) + '<b style="font-weight:normal;font-size:7px;vertical-align:super;color:' + (TT.hiLo(c) > 0 ? '#5fe06a' : TT.hiLo(c) < 0 ? '#ff6a5a' : '#aaa') + '">' + (TT.hiLo(c) > 0 ? '+1' : TT.hiLo(c) < 0 ? '−1' : '·0') + '</b>').join(' &nbsp;');
+    await modal('<h2>NOT QUITE</h2><p class="say">THE COUNT IS ' + signed(S.count) + '</p><p class="you">YOU SAID ' + signed(guess) + '</p>' +
+      (last ? '<p>Last hand\'s cards:</p><div class="why">' + last + '</div>' : '') +
+      '<p class="fine" style="margin-top:10px">True count ≈ ' + (Math.round(tc * 2) / 2) + ' (running count ÷ ' + (Math.round((TT.DECKS * 52 - S.shoe.pos) / 26) / 2) + ' decks left). Count streak reset to 0.</p>',
+      [{ id: 'ok', label: final ? 'SEE RESULTS' : 'DEAL NEXT HAND', cls: 'stand' }]);
+  }
+  P.life.countChecks = (P.life.countChecks || 0) + 1; if (right) P.life.countOk = (P.life.countOk || 0) + 1;
+  save(); renderHud();
+}
+
+// ---------- Shhhhh: the other players ----------
+// Two regulars share the table. They play the book (no splits) and act in seat order.
+const NPC_NAMES = ['DOT', 'SAL'];
+async function npcPlay(npc) {
+  const up = R.dealer[0];
+  npc.active = true; render(); await sleep(350);
+  for (;;) {
+    const t = TT.total(npc.cards).t;
+    if (t > 21) { npc.bust = true; render(); await sleep(400); break; }
+    if (t === 21) break;
+    const b = TT.book(npc.cards, up, { canDouble: npc.cards.length === 2, canSplit: false });
+    toast(npc.name + ': ' + TT.NAMES[b.action]);
+    await sleep(500);
+    if (b.action === 'S') break;
+    if (b.action === 'D') { npc.doubled = true; await deal(npc.cards); if (TT.total(npc.cards).t > 21) { npc.bust = true; render(); await sleep(400); } break; }
+    await deal(npc.cards);
+  }
+  npc.active = false; render(); await sleep(250);
+}
 
 async function playHand(i) {
   const h = R.hands[i];
@@ -506,6 +587,8 @@ async function correct(info, bookId, yourId) {
 }
 
 function settleAll() {
+  (R.npcs || []).forEach(n => { if (!n.res) n.res = TT.settle(n, R.dealer); });
+  if (isShhh()) S.lastSeen = R.seen || [];
   let units = 0, anyBJ = false;
   for (const h of R.hands) {
     const res = TT.settle(h, R.dealer);
@@ -736,9 +819,12 @@ function baseK() {
 }
 function renderHud() {
   if (!S) return;
-  $('#handNo').textContent = Math.min(S.roundDone ? S.handNo : S.handNo + 1, SESSION_HANDS) + '/' + SESSION_HANDS;
+  $('#handNo').textContent = isShhh()
+    ? (S.roundDone ? S.handNo : S.handNo + 1) + ' · ' + Math.min(100, Math.round(100 * S.shoe.pos / TT.CUT_CARD)) + '%'
+    : Math.min(S.roundDone ? S.handNo : S.handNo + 1, SESSION_HANDS) + '/' + SESSION_HANDS;
+  $('#countStreak').textContent = S.stats.countStreak || 0;
   $('#chips').textContent = money(S.chips);
-  $('#seed').textContent = S.mode === 'daily' ? 'DAILY' : (S.mode === 'soft' ? 'SOFT ' : S.mode === 'split' ? 'SPLIT ' : 'SEED ') + S.seed;
+  $('#seed').textContent = S.mode === 'daily' ? 'DAILY' : (S.mode === 'soft' ? 'SOFT ' : S.mode === 'split' ? 'SPLIT ' : S.mode === 'shhh' ? 'SHH ' : 'SEED ') + S.seed;
   $('#winStreak').textContent = S.stats.winStreak;
   $('#bookStreak').textContent = S.stats.bookStreak;
 }
@@ -753,9 +839,10 @@ function render() {
   setHTML($('#dealerLabel'), dl);
 
   const hz = $('#hands');
-  const n = Math.max(1, R.hands.length);
+  const n = Math.max(1, R.hands.length) + (R.npcs ? R.npcs.length : 0);
   const avail = Math.min(innerWidth, 520) - 16;
-  const hk = n === 1 ? k : Math.max(1.5, Math.min(k - 1, Math.floor((avail / n) / 40 * 2) / 2));
+  let hk = n === 1 ? k : Math.max(1.5, Math.min(k - 1, Math.floor((avail / n) / 40 * 2) / 2));
+  if (R.npcs && (R.hands.length > 1 || R.hands.concat(R.npcs).some(x => x.cards.length > 3))) hk = 1.5;
   hz.style.setProperty('--k', hk);
   let boxes;
   if (!R.hands.length) {
@@ -766,11 +853,12 @@ function render() {
     boxes = [placeholder];
   } else {
     boxes = R.hands.map((h, i) => boxFor(h, i));
+    if (R.npcs) boxes = [boxFor(R.npcs[0], -1)].concat(boxes, [boxFor(R.npcs[1], -1)]);
   }
   syncCards(hz, boxes);
   // clear one-shot animation flags
   R.dealer.forEach(c => { c.fresh = false; c.flip = false; });
-  R.hands.forEach(h => h.cards.forEach(c => { c.fresh = false; }));
+  R.hands.concat(R.npcs || []).forEach(h => h.cards.forEach(c => { c.fresh = false; }));
 }
 // Keep existing elements attached (so running animations aren't restarted) and only add/move what changed.
 function syncCards(parent, els) {
@@ -786,11 +874,12 @@ function boxFor(h, i) {
     b = { el: document.createElement('div'), cards: document.createElement('div'), lab: document.createElement('div'), bet: document.createElement('div'), res: null };
     b.cards.className = 'cards'; b.lab.className = 'label'; b.bet.className = 'bet';
     b.el.append(b.cards, b.lab);
+    if (h.npc) { const nm = document.createElement('div'); nm.className = 'npcname'; nm.textContent = h.name; b.el.prepend(nm); }
     boxEls.set(h, b);
   }
-  const active = i === R.active;
+  const active = h.npc ? !!h.active : i === R.active;
   if (active && !b.el.classList.contains('active')) b.el.style.animationDelay = -((performance.now() % 2200) / 1000) + 's';
-  b.el.className = 'box' + (active ? ' active' : '');
+  b.el.className = 'box' + (active ? ' active' : '') + (h.npc ? ' npc' : '');
   syncCards(b.cards, h.cards.map(c => cardEl(c)));
   const tt = h.split && TT.isBlackjack(h.cards) ? '21' : totalText(h.cards);
   setHTML(b.lab, h.cards.length ? '<b>' + tt + '</b>' + (h.doubled ? ' x2' : '') : '&nbsp;');
@@ -830,6 +919,7 @@ function shareText() {
     return 'Ten Ten Blackjack Daily ' + dailyLabel(S.dailyKey) + ': ' + money(S.chips) + ' from ' + money(DAILY_START) +
       ' · book ' + pct(st.ok, st.dec) + (st.tenten ? ' · ' + st.tenten + '× Ten Ten Bust' : '') + ' (play chips only)';
   }
+  if (S.mode === 'shhh') return 'Ten Ten Blackjack Shhhhh seed ' + S.seed + ': count right ' + st.countOk + '/' + st.countChecks + ', book ' + pct(st.ok, st.dec) + '. Same shoe, can you keep the count?';
   return 'Ten Ten Blackjack ' + (TT.PRACTICE[S.mode] ? TT.PRACTICE[S.mode].toLowerCase() + ' ' : '') + 'seed ' + S.seed + ': won ' + st.won + '/' + S.handNo + ', book ' + pct(st.ok, st.dec) +
     ', best book streak ' + st.bestBook + (st.tenten ? ', ' + st.tenten + '× Ten Ten Bust' : '') + '. Same cards, your turn:';
 }
@@ -848,6 +938,7 @@ async function finishSession() {
     ['BLACKJACKS', st.bj], ['BOOK PLAYS', st.ok + '/' + st.dec + ' (' + pct(st.ok, st.dec) + ')'],
     ['BEST WIN STREAK', st.bestWin], ['BEST BOOK STREAK', st.bestBook], ['TEN TEN BUSTS', st.tenten],
     ['EGGS (OFF BOOK, STILL WON)', st.eggs || 0],
+    ...(S.mode === 'shhh' ? [['COUNT CHECKS', st.countOk + '/' + st.countChecks + ' (' + pct(st.countOk, st.countChecks) + ')'], ['BEST COUNT STREAK', st.bestCount]] : []),
   ].map(([a, b]) => '<div class="stat">' + a + ' <b>' + esc(b) + '</b></div>').join('');
   if (st.mistakes.length) html += '<h3>PLAYS TO REVISE</h3><p class="fine">' + st.mistakes.slice(0, 12).map(esc).join('<br>') + '</p>';
   if (chips) html += '<p class="fine" style="margin-top:8px">Play chips only. No real money, nothing to cash out.</p>';
@@ -883,10 +974,11 @@ function openMenu(note) {
     '<button class="btn dbl" data-a="soft">SOFT<br>PRACTICE<small>ACE + ANOTHER</small></button>' +
     '<button class="btn split" data-a="split">SPLIT<br>PRACTICE<small>ALWAYS A PAIR</small></button></div>' +
     '<button class="btn hit" data-a="daily">DAILY · ' + dailyLabel(key) + (dr ? '<small>YOUR SCORE ' + money(dr.chips) + ' · BOOK ' + esc(dr.book) + '</small>' : '<small>£500 PLAY CHIPS · £250 TABLE MAX</small>') + '</button>' +
+    '<button class="btn split" data-a="shhh">SHHHHH · COUNT CARDS<small>3 SEATS · 6-DECK SHOE · HI-LO</small></button>' +
     '<button class="btn dark" data-a="chips">CHIP PRACTICE<small>£500 PLAY CHIPS · NEW SHOE EVERY TIME</small></button>' +
     '<button class="btn split" data-a="chart">BOOK CHART</button>' +
     '<button class="btn dark" data-a="how">HOW IT WORKS</button></div>' +
-    '<div class="lifetime">BOOK ACCURACY ' + pct(P.life.ok, P.life.dec) + ' · BEST BOOK STREAK ' + P.best.book + '<br>BEST WIN STREAK ' + P.best.win + ' · TEN TEN BUSTS ' + P.life.tenten + '<br>EGGS ' + (P.life.eggs || 0) + '</div>' +
+    '<div class="lifetime">BOOK ACCURACY ' + pct(P.life.ok, P.life.dec) + ' · BEST BOOK STREAK ' + P.best.book + '<br>BEST WIN STREAK ' + P.best.win + ' · TEN TEN BUSTS ' + P.life.tenten + '<br>EGGS ' + (P.life.eggs || 0) + (P.life.countChecks ? ' · COUNT ' + pct(P.life.countOk || 0, P.life.countChecks) : '') + '</div>' +
     '<div class="soundRow"><button class="btn dark" data-a="sound" style="font-size:8px;padding:8px 10px">SOUND ' + (P.sound ? 'ON' : 'OFF') + '</button></div>' +
     '<p class="fine" style="text-align:center;margin:10px 0 0">PLAY CHIPS ONLY. NO REAL MONEY, NO PURCHASES, NOTHING TO WIN OR CASH OUT.<br>v' + VERSION + '</p>';
   mb.innerHTML = h;
@@ -899,7 +991,7 @@ function menuAction(a) {
   if (a === 'resume') { const cur = P.cur; return startSession(cur.mode, cur.seed, Object.assign({}, cur, { stats: Object.assign(newStats(), cur.stats) })); }
   if (a === 'new') return startSession('main', TT.randomSeed());
   if (a === 'daily') return startSession('daily');
-  if (a === 'soft' || a === 'split' || a === 'chips') return startSession(a, TT.randomSeed());
+  if (a === 'soft' || a === 'split' || a === 'chips' || a === 'shhh') return startSession(a, TT.randomSeed());
   if (a === 'sound') { P.sound = !P.sound; save(); return openMenu(); }
   if (a === 'seed') return askSeed();
   if (a === 'chart') return showChart();
@@ -938,6 +1030,7 @@ async function showHow() {
     '<p>Every session is 25 hands from one shuffled shoe. The shoe comes from the session\'s seed, so anyone who plays the same seed gets the same cards in the same order. Share yours from the results screen.</p>' +
     '<p>Each time you act, your play is checked against the book (basic strategy). Get it right and your BOOK STREAK grows. Get it wrong and you\'ll see what the book says and why, then your move is played: no take-backs.</p>' +
     '<p>Win a hand and your WIN STREAK grows. A push keeps it going; a loss resets it.</p>' +
+    '<h3>SHHHHH (CARD COUNTING)</h3><p>You take the middle seat at a three-seat table with two regulars, Dot and Sal, who play the book. It\'s a full 6-deck shoe: the first card is burned and the cut card sits about three quarters of the way in, so you play until it comes out. Keep a Hi-Lo running count of every card you see (2-6 +1, 7-9 0, tens and Aces -1). Before each hand you\'ll be asked for the count. Get it wrong and you\'ll see the right count, the true count and last hand\'s cards.</p>' +
     '<h3>CHIP PRACTICE</h3><p>Plays exactly like the Daily (£500 in play chips, £10 minimum, £250 table maximum) but with a fresh random shoe each time, so you can practise as often as you like. Share your seed and chip total at the end.</p>' +
     '<h3>SOFT & SPLIT PRACTICE</h3><p>25-hand sessions with no betting that drill the tricky hands. In Soft Practice your first two cards are always an Ace and a 2 to 9; in Split Practice they are always a pair. The dealer\'s hand and every card after that come from the normal shoe, and these sessions have seeds you can share too.</p>' +
     '<h3>TEN TEN BUST</h3><p>If the dealer busts and the last two cards they drew are both tens or picture cards, it\'s a TEN TEN BUST.</p>' +

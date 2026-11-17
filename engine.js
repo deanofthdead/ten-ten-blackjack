@@ -221,7 +221,7 @@
   // ---- Practice modes ------------------------------------------------------
   // The player's first two cards in Soft / Split practice. Drawn from their own seeded stream
   // per hand (so they never disturb the shoe), everything after them comes from the shoe.
-  const PRACTICE = { soft: 'SOFT PRACTICE', split: 'SPLIT PRACTICE', chips: 'CHIP PRACTICE' };
+  const PRACTICE = { soft: 'SOFT PRACTICE', split: 'SPLIT PRACTICE', chips: 'CHIP PRACTICE', shhh: 'SHHHHH' };
   function practiceCards(seed, mode, handNo) {
     const rng = rngFor(seed + ':' + mode + ':' + handNo);
     const pick = a => a[Math.floor(rng() * a.length)];
@@ -241,6 +241,14 @@
     }
     return null;
   }
+
+  // ---- Card counting (Shhhhh mode) -----------------------------------------
+  // Hi-Lo: 2-6 count +1, 7-9 count 0, tens and Aces count -1.
+  function hiLo(c) { const v = val(c.r); return v <= 6 ? 1 : v <= 9 ? 0 : -1; }
+  // The dealer places the cut card about 3/4 of the way into the 6-deck shoe (78 cards behind it).
+  const CUT_CARD = DECKS * 52 - 78;
+  // True count = running count per deck still to be dealt.
+  function trueCount(running, pos) { const decksLeft = Math.max(0.5, (DECKS * 52 - pos) / 52); return running / decksLeft; }
 
   // ---- Settlement ----------------------------------------------------------
   // Returns 'bj' | 'win' | 'push' | 'lose' for one player hand against the dealer's final hand.
@@ -267,7 +275,7 @@
     RANKS, SUITS, DECKS, HANDS_PER_SESSION, MAX_HANDS, NAMES, INSURANCE_WHY,
     rngFor, randomSeed, cleanSeed, dailyKey, dailySeed, Shoe,
     val, isTen, total, isBlackjack, upName, dealerShouldHit, isTenTenBust,
-    pairCode, softCode, hardCode, isPair, book, handLabel, settle, payout, PRACTICE, practiceCards,
+    pairCode, softCode, hardCode, isPair, book, handLabel, settle, payout, PRACTICE, practiceCards, hiLo, CUT_CARD, trueCount,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TT = api;

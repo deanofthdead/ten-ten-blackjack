@@ -108,4 +108,11 @@ t('practice hands', () => {
   assert.deepStrictEqual(TT.practiceCards('X', 'soft', 3), TT.practiceCards('X', 'soft', 3));
   assert.strictEqual(TT.practiceCards('X', 'main', 3), null);
 });
+t('hi-lo count', () => {
+  assert.deepStrictEqual(['2', '6', '7', '9', '10', 'K', 'A'].map(r => TT.hiLo({ r })), [1, 1, 0, 0, -1, -1, -1]);
+  const s = new TT.Shoe('C'); let c = 0; for (const k of s.cards) c += TT.hiLo(k);
+  assert.strictEqual(c, 0); // a full shoe always counts back to zero
+  assert.strictEqual(TT.CUT_CARD, 234);
+  assert.strictEqual(TT.trueCount(6, 156), 2);
+});
 console.log(`ok ${n} tests`);
