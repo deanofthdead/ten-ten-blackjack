@@ -76,6 +76,10 @@ img{image-rendering:pixelated;image-rendering:crisp-edges}
 @keyframes tshake{0%{transform:translate(calc(var(--amp) * -1),0) rotate(calc(var(--spin) * -1))}25%{transform:translate(var(--amp),calc(var(--amp) * -.7)) rotate(var(--spin))}50%{transform:translate(calc(var(--amp) * -.6),var(--amp)) rotate(calc(var(--spin) * -.5))}75%{transform:translate(calc(var(--amp) * .8),calc(var(--amp) * .4)) rotate(calc(var(--spin) * .7))}100%{transform:translate(calc(var(--amp) * -1),0) rotate(calc(var(--spin) * -1))}}
 #print .t1.b-win{fill:#5fe06a}#print .t1.b-lose{fill:#ff6a5a}#print .t1.b-push{fill:#ffffff}#print .t1.b-bust{fill:#ff9a3c}
 #print .sub{font-size:7px;line-height:1.6;opacity:.95}
+#print .hilo{display:none;gap:6px;font-size:7px;line-height:1.4;flex-wrap:wrap;justify-content:center}
+#print .hilo span{border:2px solid currentColor;padding:4px 5px;background:#0003}
+#print .hilo .p{color:#7dff8a}#print .hilo .z{color:#e8e8e8}#print .hilo .m{color:#ff8a7a}
+.shhh.feltrules #print .hilo{display:flex}
 #print .ins{font-size:7px;border:3px solid var(--yl);padding:5px 10px}
 /* Player hands */
 #hands{display:flex;justify-content:center;gap:6px;width:100%;flex-wrap:nowrap}
@@ -195,6 +199,7 @@ body.shake #app{animation:shake .18s ease-in-out 4}
         <text class="t1" id="bannerText" opacity="0"><textPath id="bannerPath" href="#arc" startOffset="50%" text-anchor="middle">TEN TEN BLACKJACK</textPath></text>
       </svg>
       <div class="sub">BLACKJACK PAYS 3 TO 2<br>DEALER STANDS ON ALL 17s</div>
+      <div class="hilo"><span class="p">2 3 4 5 6 = +1</span><span class="z">7 8 9 = 0</span><span class="m">10 J Q K A = -1</span></div>
       <div class="ins">INSURANCE PAYS 2 TO 1</div>
     </div>
     <div class="zone" id="playerZone">
@@ -217,7 +222,7 @@ body.shake #app{animation:shake .18s ease-in-out 4}
   <div class="note" id="ttNote">TAP TO CONTINUE</div>
 </div>
 
-<script src="engine.js?v=3.2.0"></script>
-<script src="app.js?v=3.2.0"></script>
+<script src="engine.js?v=3.3.0"></script>
+<script src="app.js?v=3.3.0"></script>
 </body>
 </html>

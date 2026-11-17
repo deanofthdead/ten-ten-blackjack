@@ -5,7 +5,7 @@
 const $ = s => document.querySelector(s);
 const SESSION_HANDS = TT.HANDS_PER_SESSION;
 const DAILY_START = 500, TABLE_MAX = 250, TABLE_MIN = 10, CHIP_VALUES = [10, 50, 100];
-const VERSION = '3.2.0';
+const VERSION = '3.3.0';
 
 // ---------- Storage (per device, never required) ----------
 const KEY = 'ttbj-v1';
@@ -93,13 +93,15 @@ function drawRank(x, glyphs, ox, oy, col, sc) {
   }
 }
 const imgCache = {};
-function cardSrc(card) {
-  const k = card.r + card.s;
+// tint: 'plus' (pale green) or 'minus' (pale red) for Shhhhh's count colours.
+const TINT = { plus: '#b5eaae', minus: '#f4b1a8' };
+function cardSrc(card, tint) {
+  const k = card.r + card.s + (tint || '');
   if (imgCache[k]) return imgCache[k];
   const [c, x] = canvas(CARD_W, CARD_H);
   const col = (card.s === 'H' || card.s === 'D') ? RED : BLK;
   const pip = PIP11[card.s];
-  cardShape(x, BLK, PAPER);
+  cardShape(x, BLK, TINT[tint] || PAPER);
   const glyphs = card.r === '10' ? ['1', '0'] : [card.r];
   // Top-left index: the part you read when cards overlap.
   drawRank(x, glyphs, 7, 7, col, 3);
@@ -158,7 +160,9 @@ const SUIT_NAME = { S: 'spades', H: 'hearts', D: 'diamonds', C: 'clubs' };
 const cardEls = new WeakMap();
 function cardEl(card, down) {
   let im = cardEls.get(card);
-  const src = down ? backSrc() : cardSrc(card);
+  // Shhhhh colour option: +1 cards green, -1 cards red (0 cards stay white).
+  const tint = !down && P.hlColors && isShhh() ? ({ 1: 'plus', '-1': 'minus' })[TT.hiLo(card)] : '';
+  const src = down ? backSrc() : cardSrc(card, tint);
   if (!im) {
     im = new Image();
     im.draggable = false;
@@ -266,6 +270,8 @@ let S = null;   // the session
 let R = null;   // the current round
 function newStats() { return { won: 0, lost: 0, push: 0, bj: 0, dec: 0, ok: 0, winStreak: 0, bestWin: 0, bookStreak: 0, bestBook: 0, tenten: 0, eggs: 0, countOk: 0, countChecks: 0, countStreak: 0, bestCount: 0, mistakes: [] }; }
 // Chips are in play (play money only) in the Daily and in Chip Practice.
+function applySettings() { document.body.classList.toggle('feltrules', !!P.feltRules); }
+applySettings();
 function isShhh() { return S && S.mode === 'shhh'; }
 function isDaily() { return S && (S.mode === 'daily' || S.mode === 'chips'); }
 function money(n) { return '£' + (Math.round(n * 100) / 100).toLocaleString('en-GB'); }
@@ -999,6 +1005,9 @@ function openMenu(note) {
     '<div class="lifetime">BOOK ACCURACY ' + pct(P.life.ok, P.life.dec) + ' · BEST BOOK STREAK ' + P.best.book + '<br>BEST WIN STREAK ' + P.best.win + ' · TEN TEN BUSTS ' + P.life.tenten + '<br>EGGS ' + (P.life.eggs || 0) + (P.life.countChecks ? ' · COUNT ' + pct(P.life.countOk || 0, P.life.countChecks) : '') + '</div>' +
     '<div class="soundRow"><button class="btn dark" data-a="sound" style="font-size:8px;padding:8px 10px">SOUND ' + (P.sound ? 'ON' : 'OFF') + '</button>' +
     '<button class="btn dark" data-a="bustp" style="font-size:8px;padding:8px 10px">DEALER BUST % ' + (P.showBust ? 'ON' : 'OFF') + '</button></div>' +
+    '<div class="soundRow"><span class="fine" style="width:100%;text-align:center">SHHHHH OPTIONS</span>' +
+    '<button class="btn dark" data-a="hlcol" style="font-size:8px;padding:8px 10px">+1 GREEN / -1 RED ' + (P.hlColors ? 'ON' : 'OFF') + '</button>' +
+    '<button class="btn dark" data-a="rules" style="font-size:8px;padding:8px 10px">COUNT RULES ON FELT ' + (P.feltRules ? 'ON' : 'OFF') + '</button></div>' +
     '<p class="fine" style="text-align:center;margin:10px 0 0">PLAY CHIPS ONLY. NO REAL MONEY, NO PURCHASES, NOTHING TO WIN OR CASH OUT.<br>v' + VERSION + '</p>';
   mb.innerHTML = h;
   mb.querySelectorAll('[data-a]').forEach(b => b.onclick = () => { sfx.click(); menuAction(b.dataset.a); });
@@ -1014,6 +1023,8 @@ function menuAction(a) {
   if (a === 'soft' || a === 'split' || a === 'chips') return startSession(a, TT.randomSeed());
   if (a === 'sound') { P.sound = !P.sound; save(); return openMenu(); }
   if (a === 'bustp') { P.showBust = !P.showBust; save(); render(); return openMenu(); }
+  if (a === 'hlcol') { P.hlColors = !P.hlColors; save(); render(); return openMenu(); }
+  if (a === 'rules') { P.feltRules = !P.feltRules; save(); applySettings(); return openMenu(); }
   if (a === 'seed') return askSeed();
   if (a === 'chart') return showChart();
   if (a === 'how') return showHow();
@@ -1067,6 +1078,7 @@ async function showHow() {
     '<p>Win a hand and your WIN STREAK grows. A push keeps it going; a loss resets it.</p>' +
     '<h3>SHHHHH (CARD COUNTING)</h3><p>Pick 0, 1 or 2 other players: Dot sits on your left and plays before you, Sal on your right and plays after you, and both play the book. It\'s a full 6-deck shoe: the first card is burned and the cut card sits about three quarters of the way in, so you play until it comes out. Keep a Hi-Lo running count of every card you see (2-6 +1, 7-9 0, tens and Aces -1). Before each hand you\'ll be asked for the count. Get it wrong and you\'ll see the right count, the true count and last hand\'s cards.</p>' +
     '<h3>DEALER BUST %</h3><p>Turn it on from the menu to see the dealer\'s chance of busting next to their total. While the hole card is face down it\'s worked out from the up card (knowing the dealer has already checked for blackjack); once it\'s turned over it uses the dealer\'s actual cards until they stand or bust. It\'s the long-run chance from the house rules, not a peek at the shoe.</p>' +
+    '<p>Shhhhh options (menu): colour every +1 card green and every -1 card red, and print the Hi-Lo rules on the felt.</p>' +
     '<h3>CHIP PRACTICE</h3><p>Plays exactly like the Daily (£500 in play chips, £10 minimum, £250 table maximum) but with a fresh random shoe each time, so you can practise as often as you like. Share your seed and chip total at the end.</p>' +
     '<h3>SOFT & SPLIT PRACTICE</h3><p>25-hand sessions with no betting that drill the tricky hands. In Soft Practice your first two cards are always an Ace and a 2 to 9; in Split Practice they are always a pair. The dealer\'s hand and every card after that come from the normal shoe, and these sessions have seeds you can share too.</p>' +
     '<h3>TEN TEN BUST</h3><p>If the dealer busts and the last two cards they drew are both tens or picture cards, it\'s a TEN TEN BUST.</p>' +
