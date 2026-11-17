@@ -12,6 +12,7 @@ A retro pixel blackjack trainer for iPhone that lets you play the whole game. Ev
 - **Sessions** are 25 hands from one seeded 6-deck shoe. Same seed, same cards in the same order. Share a seed with a link like `…/ten-ten-blackjack/?s=K7Q2XB`.
 - **Book streak** counts consecutive book-correct decisions (hit, stand, double, split, and turning down insurance). **Win streak** counts hands won in a row; a push keeps it alive.
 - **Main mode** has no betting at all, only decisions.
+- **Chip Practice** plays like the Daily (£500 play chips, £10 min, £250 max) but on a fresh random seed every time; share links add `&m=chips`.
 - **Soft Practice** and **Split Practice** are 25-hand sessions (no betting) where your first two cards are always an Ace plus 2 to 9, or always a pair. The dealer and every later card come from the normal shoe. Share links add `&m=soft` or `&m=split`.
 - **Daily** gives everyone the same shoe for the day (seeded from the UTC date, computed on the phone), with £500 of play chips, a £10 minimum and £250 table maximum. Share your chip total at the end; your first finish of the day is your score. Link: `…/?daily`.
 - **Ten Ten Bust**: when the dealer busts and their last two cards are both tens or picture cards, the game makes a big deal of it.

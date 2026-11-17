@@ -221,7 +221,7 @@
   // ---- Practice modes ------------------------------------------------------
   // The player's first two cards in Soft / Split practice. Drawn from their own seeded stream
   // per hand (so they never disturb the shoe), everything after them comes from the shoe.
-  const PRACTICE = { soft: 'SOFT PRACTICE', split: 'SPLIT PRACTICE' };
+  const PRACTICE = { soft: 'SOFT PRACTICE', split: 'SPLIT PRACTICE', chips: 'CHIP PRACTICE' };
   function practiceCards(seed, mode, handNo) {
     const rng = rngFor(seed + ':' + mode + ':' + handNo);
     const pick = a => a[Math.floor(rng() * a.length)];
