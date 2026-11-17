@@ -250,6 +250,36 @@
   // True count = running count per deck still to be dealt.
   function trueCount(running, pos) { const decksLeft = Math.max(0.5, (DECKS * 52 - pos) / 52); return running / decksLeft; }
 
+  // ---- Dealer bust chance ----------------------------------------------------
+  // Chance the dealer busts from the cards showing, playing to these rules (stands on all 17s).
+  // Uses an infinite-deck model (each rank 1/13, tens 4/13), the standard way bust charts are made.
+  // With one card showing, the hole card is still unknown; if the dealer peeked with an Ace or ten
+  // up (and play carried on) the hole card can't be the one that makes blackjack.
+  const RANK_P = [[1, 1 / 13], [2, 1 / 13], [3, 1 / 13], [4, 1 / 13], [5, 1 / 13], [6, 1 / 13], [7, 1 / 13], [8, 1 / 13], [9, 1 / 13], [10, 4 / 13]];
+  const bustMemo = {};
+  function bustFrom(hard, aces) { // hard = total counting every Ace as 1
+    const key = hard + ':' + (aces ? 1 : 0);
+    if (key in bustMemo) return bustMemo[key];
+    const best = aces && hard + 10 <= 21 ? hard + 10 : hard;
+    let p;
+    if (hard > 21) p = 1;
+    else if (best >= 17) p = 0;
+    else { p = 0; for (const [v, pr] of RANK_P) p += pr * bustFrom(hard + v, aces || v === 1); }
+    return (bustMemo[key] = p);
+  }
+  function dealerBustChance(visible, holeHidden) {
+    let hard = 0, aces = false;
+    for (const c of visible) { const v = val(c.r) === 11 ? 1 : val(c.r); hard += v; if (v === 1) aces = true; }
+    if (!holeHidden) return bustFrom(hard, aces);
+    const up = val(visible[0].r);
+    let p = 0, w = 0;
+    for (const [v, pr] of RANK_P) {
+      if ((up === 11 && v === 10) || (up === 10 && v === 1)) continue; // peeked: no blackjack underneath
+      p += pr * bustFrom(hard + v, aces || v === 1); w += pr;
+    }
+    return p / w;
+  }
+
   // ---- Settlement ----------------------------------------------------------
   // Returns 'bj' | 'win' | 'push' | 'lose' for one player hand against the dealer's final hand.
   function settle(hand, dealerCards) {
@@ -275,7 +305,7 @@
     RANKS, SUITS, DECKS, HANDS_PER_SESSION, MAX_HANDS, NAMES, INSURANCE_WHY,
     rngFor, randomSeed, cleanSeed, dailyKey, dailySeed, Shoe,
     val, isTen, total, isBlackjack, upName, dealerShouldHit, isTenTenBust,
-    pairCode, softCode, hardCode, isPair, book, handLabel, settle, payout, PRACTICE, practiceCards, hiLo, CUT_CARD, trueCount,
+    pairCode, softCode, hardCode, isPair, book, handLabel, settle, payout, PRACTICE, practiceCards, hiLo, CUT_CARD, trueCount, dealerBustChance,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.TT = api;

@@ -115,4 +115,15 @@ t('hi-lo count', () => {
   assert.strictEqual(TT.CUT_CARD, 234);
   assert.strictEqual(TT.trueCount(6, 156), 2);
 });
+t('dealer bust chance', () => {
+  const up = r => TT.dealerBustChance([{ r }], true);
+  // Standard infinite-deck S17 bust rates: 2 35.4%, 5 41.6%, 6 42.3%, 7 26.2%. For 10 and A the
+  // published 21.4% / 11.7% include dealer blackjacks; after a peek shows none they become /(12/13) and /(9/13).
+  const near = (x, want, tol = 0.003) => assert.ok(Math.abs(x - want) < tol, x + ' vs ' + want);
+  near(up('2'), 0.354); near(up('5'), 0.4165); near(up('6'), 0.4232); near(up('7'), 0.2625);
+  near(up('10'), 0.2143 * 13 / 12, 0.004); near(up('A'), 0.1165 * 13 / 9, 0.004);
+  assert.strictEqual(TT.dealerBustChance(H('10', '7'), false), 0);
+  near(TT.dealerBustChance(H('10', '6'), false), 8 / 13, 0.001); // 16: any 6+ busts
+  near(TT.dealerBustChance(H('10', '2'), false), 4 / 13 + (1 / 13) * TT.dealerBustChance(H('10', '2', 'A'), false) + (1 / 13) * TT.dealerBustChance(H('10', '2', '2'), false) + (1 / 13) * TT.dealerBustChance(H('10', '2', '3'), false) + (1 / 13) * TT.dealerBustChance(H('10', '2', '4'), false), 0.001);
+});
 console.log(`ok ${n} tests`);
